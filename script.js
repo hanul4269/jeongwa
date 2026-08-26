@@ -1,10 +1,10 @@
 const baseSongs = Array.isArray(window.JEONGWA_SONGS) ? window.JEONGWA_SONGS : [];
 const storageKey = "jeongwa-songbook-added-songs";
 const editsStorageKey = "jeongwa-songbook-edited-songs";
-const authStorageKey = "jeongwa-songbook-local-auth";
-const editorsStorageKey = "jeongwa-songbook-local-editors";
-const ownerStorageKey = "jeongwa-songbook-local-owner";
 const upEventsStorageKey = "jeongwa-songbook-up-events";
+const SUPABASE_URL = "https://ftdptxblxijbmgkbqnnh.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_3_tpgX3yEvfGrGvFdhRUzA_qQuemlEh";
+const OWNER_EMAIL = "riosniper12@gmail.com";
 const categories = ["K-POP", "J-POP", "POP/OST", "숙제곡"];
 const categoryLabels = {
   "K-POP": "K-POP",
@@ -21,18 +21,20 @@ const state = {
 let customSongs = loadCustomSongs();
 let editedSongsById = loadEditedSongs();
 let songs = mergeSongs();
-let authUser = loadAuthUser();
-let editorEmails = loadEditorEmails();
-let ownerEmail = loadOwnerEmail();
+let authUser = null;
+let editorEmails = [];
+const ownerEmail = OWNER_EMAIL;
 let upEvents = loadUpEvents();
 let activeAdminTab = "editors";
 
-if (authUser && !ownerEmail) {
-  ownerEmail = authUser.email;
-  saveOwnerEmail();
-  editorEmails = uniqueEmails([authUser.email, ...editorEmails]);
-  saveEditorEmails();
-}
+const authDb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    detectSessionInUrl: false,
+    flowType: "pkce",
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -69,50 +71,6 @@ function uniqueEmails(values) {
   return [...new Set(values.map(normalizeEmail).filter(isValidEmail))];
 }
 
-function loadAuthUser() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(authStorageKey) || "null");
-    return parsed && isValidEmail(parsed.email)
-      ? { email: normalizeEmail(parsed.email), signedInAt: parsed.signedInAt || "" }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveAuthUser() {
-  if (!authUser) {
-    localStorage.removeItem(authStorageKey);
-    return;
-  }
-
-  localStorage.setItem(authStorageKey, JSON.stringify(authUser));
-}
-
-function loadEditorEmails() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(editorsStorageKey) || "[]");
-    return Array.isArray(parsed) ? uniqueEmails(parsed) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveEditorEmails() {
-  editorEmails = uniqueEmails(editorEmails);
-  localStorage.setItem(editorsStorageKey, JSON.stringify(editorEmails));
-}
-
-function loadOwnerEmail() {
-  return normalizeEmail(localStorage.getItem(ownerStorageKey) || "");
-}
-
-function saveOwnerEmail() {
-  if (ownerEmail) {
-    localStorage.setItem(ownerStorageKey, ownerEmail);
-  }
-}
-
 function isSignedIn() {
   return Boolean(authUser?.email);
 }
@@ -124,6 +82,10 @@ function isEditorEmail(email) {
 
 function canEdit() {
   return isSignedIn() && isEditorEmail(authUser.email);
+}
+
+function canManageEditors() {
+  return isSignedIn() && normalizeEmail(authUser.email) === normalizeEmail(ownerEmail);
 }
 
 function displayNameFromEmail(email) {
@@ -333,6 +295,7 @@ function renderTabs() {
     return `
       <button class="tab${active}" type="button" data-category="${escapeHtml(category)}">
         <span>${escapeHtml(categoryLabels[category])}</span>
+        <span class="tab-count">${categoryCount(category).toLocaleString("ko-KR")}</span>
       </button>
     `;
   }).join("");
@@ -392,7 +355,12 @@ function renderCards(items) {
 }
 
 function renderSummary(items) {
-  $("#result-summary").textContent = "";
+  const label = categoryLabels[state.category];
+  const total = categoryCount(state.category);
+  const hasQuery = normalize(state.query).length > 0;
+  $("#result-summary").textContent = hasQuery
+    ? `${label} 검색 결과 ${items.length.toLocaleString("ko-KR")}곡 / 전체 ${total.toLocaleString("ko-KR")}곡`
+    : `${label} ${total.toLocaleString("ko-KR")}곡`;
 }
 
 function render() {
@@ -424,49 +392,63 @@ function setAuthMenu(open) {
   button.setAttribute("aria-expanded", String(open));
 }
 
-function openLocalLoginModal() {
+function openLoginModal() {
   setAuthMenu(false);
-  $("#local-login-status").textContent = "";
-  $("#local-login-form").reset();
-  openModal("#local-login-modal");
-  $("#local-login-email").focus();
+  $("#login-status").textContent = "";
+  openModal("#login-modal");
+  $("#google-login-button").focus();
 }
 
-function closeLocalLoginModal() {
-  closeModal("#local-login-modal");
+function closeLoginModal() {
+  closeModal("#login-modal");
 }
 
-function loginLocally(email) {
-  const normalized = normalizeEmail(email);
-  if (!isValidEmail(normalized)) {
-    $("#local-login-status").textContent = "이메일 형식을 확인해주세요.";
-    return false;
-  }
-
-  authUser = {
-    email: normalized,
-    signedInAt: new Date().toISOString(),
-  };
-
-  if (!ownerEmail) {
-    ownerEmail = normalized;
-    saveOwnerEmail();
-  }
-
-  if (normalized === ownerEmail && !editorEmails.includes(normalized)) {
-    editorEmails = [normalized, ...editorEmails];
-    saveEditorEmails();
-  }
-
-  saveAuthUser();
-  updateAuthUi();
-  render();
-  return true;
+function authRedirectTo() {
+  if (location.protocol === "file:") return "";
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+  if (localHosts.has(location.hostname)) return `${location.protocol}//${location.host}/`;
+  return "https://jeongwa.com/";
 }
 
-function logoutLocally() {
+async function signInWithGoogle() {
+  const status = $("#login-status");
+  const button = $("#google-login-button");
+
+  if (location.protocol === "file:") {
+    status.textContent = "로컬 로그인은 http://localhost:4000에서 이용해주세요.";
+    return;
+  }
+
+  status.textContent = "Google 로그인 페이지로 이동하는 중입니다.";
+  button.disabled = true;
+  const { data, error } = await authDb.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: authRedirectTo(),
+      skipBrowserRedirect: true,
+      queryParams: { prompt: "select_account" },
+    },
+  });
+
+  if (error) {
+    status.textContent = `로그인 준비에 실패했습니다: ${error.message}`;
+    button.disabled = false;
+    return;
+  }
+
+  if (data?.url) {
+    window.location.assign(data.url);
+    return;
+  }
+
+  status.textContent = "로그인 주소를 만들지 못했습니다. 잠시 후 다시 시도해주세요.";
+  button.disabled = false;
+}
+
+async function logout() {
+  await authDb.auth.signOut();
   authUser = null;
-  saveAuthUser();
+  editorEmails = [];
   setAuthMenu(false);
   setFabMenu(false);
   closeAddOneModal();
@@ -475,6 +457,79 @@ function logoutLocally() {
   closeAdminModal();
   updateAuthUi();
   render();
+}
+
+async function refreshEditorEmails() {
+  if (!isSignedIn()) {
+    editorEmails = [];
+    return;
+  }
+
+  const { data, error } = await authDb
+    .from("editors")
+    .select("email")
+    .order("email", { ascending: true });
+
+  if (error) {
+    console.warn("편집자 목록을 불러오지 못했습니다.", error.message);
+    editorEmails = [];
+    return;
+  }
+
+  editorEmails = uniqueEmails((data || []).map((row) => row.email));
+}
+
+async function applyAuthSession(session) {
+  authUser = session?.user
+    ? {
+        id: session.user.id,
+        email: normalizeEmail(session.user.email),
+        name: clean(session.user.user_metadata?.full_name || session.user.user_metadata?.name),
+        avatarUrl: clean(session.user.user_metadata?.avatar_url),
+      }
+    : null;
+
+  await refreshEditorEmails();
+  updateAuthUi();
+  render();
+}
+
+async function initAuth() {
+  authDb.auth.onAuthStateChange((_event, session) => {
+    window.setTimeout(() => applyAuthSession(session), 0);
+  });
+
+  const currentUrl = new URL(window.location.href);
+  const authError = currentUrl.searchParams.get("error_description") || currentUrl.searchParams.get("error");
+  if (authError) {
+    currentUrl.searchParams.delete("error");
+    currentUrl.searchParams.delete("error_code");
+    currentUrl.searchParams.delete("error_description");
+    history.replaceState({}, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
+    openLoginModal();
+    $("#login-status").textContent = `로그인에 실패했습니다: ${authError}`;
+  }
+
+  const authCode = currentUrl.searchParams.get("code");
+  if (authCode) {
+    const { data, error } = await authDb.auth.exchangeCodeForSession(authCode);
+    currentUrl.searchParams.delete("code");
+    currentUrl.searchParams.delete("state");
+    history.replaceState({}, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
+
+    if (error) {
+      openLoginModal();
+      $("#login-status").textContent = `로그인 처리에 실패했습니다: ${error.message}`;
+    } else {
+      await applyAuthSession(data.session);
+      closeLoginModal();
+      return;
+    }
+  }
+
+  const { data, error } = await authDb.auth.getSession();
+  if (error) console.warn("로그인 상태를 확인하지 못했습니다.", error.message);
+  await applyAuthSession(data?.session || null);
 }
 
 function updateAuthUi() {
@@ -489,7 +544,7 @@ function updateAuthUi() {
   document.body.classList.toggle("edit-mode", editable);
   button.classList.toggle("signed-in", signedIn && editable);
   button.classList.toggle("viewer", signedIn && !editable);
-  label.textContent = signedIn ? displayNameFromEmail(authUser.email) : "로그인";
+  label.textContent = signedIn ? (authUser.name || displayNameFromEmail(authUser.email)) : "로그인";
   menuUser.textContent = signedIn ? authUser.email : "";
   adminButton.hidden = !editable;
   fabWrap.hidden = !editable;
@@ -501,7 +556,7 @@ function updateAuthUi() {
 
 function ensureEditMode() {
   if (canEdit()) return true;
-  if (!isSignedIn()) openLocalLoginModal();
+  if (!isSignedIn()) openLoginModal();
   return false;
 }
 
@@ -533,6 +588,7 @@ function setAdminTab(tab) {
 
 function renderAdmin() {
   setAdminTab(activeAdminTab);
+  $("#editor-form").hidden = !canManageEditors();
   renderEditorList();
   renderUpEvents();
 }
@@ -554,21 +610,36 @@ function renderEditorList() {
           <div class="editor-email">${escapeHtml(email)}</div>
           ${owner ? '<span class="role-badge">소유자</span>' : '<span class="role-badge">편집자</span>'}
         </div>
-        <button class="admin-mini-btn" type="button" data-remove-editor="${escapeHtml(email)}"${owner ? " disabled" : ""}>삭제</button>
+        ${canManageEditors() && !owner
+          ? `<button class="admin-mini-btn" type="button" data-remove-editor="${escapeHtml(email)}">삭제</button>`
+          : ""}
       </div>
     `;
   }).join("");
 }
 
-function addEditorEmail(email) {
+async function addEditorEmail(email) {
   const normalized = normalizeEmail(email);
   if (!isValidEmail(normalized)) {
     $("#editor-status").textContent = "이메일 형식을 확인해주세요.";
     return;
   }
 
+  if (!canManageEditors()) {
+    $("#editor-status").textContent = "소유자만 편집자를 관리할 수 있습니다.";
+    return;
+  }
+
+  const { error } = await authDb
+    .from("editors")
+    .upsert({ email: normalized, created_by: authUser.id }, { onConflict: "email" });
+
+  if (error) {
+    $("#editor-status").textContent = `추가하지 못했습니다: ${error.message}`;
+    return;
+  }
+
   editorEmails = uniqueEmails([...editorEmails, normalized]);
-  saveEditorEmails();
   $("#editor-email").value = "";
   $("#editor-status").textContent = "추가되었습니다.";
   renderEditorList();
@@ -576,12 +647,26 @@ function addEditorEmail(email) {
   render();
 }
 
-function removeEditorEmail(email) {
+async function removeEditorEmail(email) {
   const normalized = normalizeEmail(email);
   if (normalized === ownerEmail) return;
 
+  if (!canManageEditors()) {
+    $("#editor-status").textContent = "소유자만 편집자를 관리할 수 있습니다.";
+    return;
+  }
+
+  const { error } = await authDb
+    .from("editors")
+    .delete()
+    .eq("email", normalized);
+
+  if (error) {
+    $("#editor-status").textContent = `삭제하지 못했습니다: ${error.message}`;
+    return;
+  }
+
   editorEmails = editorEmails.filter((editorEmail) => editorEmail !== normalized);
-  saveEditorEmails();
   $("#editor-status").textContent = "삭제되었습니다.";
   renderEditorList();
   updateAuthUi();
@@ -1069,7 +1154,7 @@ function bindEvents() {
   $("#auth-button").addEventListener("click", (event) => {
     event.stopPropagation();
     if (!isSignedIn()) {
-      openLocalLoginModal();
+      openLoginModal();
       return;
     }
 
@@ -1079,8 +1164,9 @@ function bindEvents() {
     event.stopPropagation();
   });
   $("#open-admin-settings").addEventListener("click", openAdminModal);
-  $("#logout-button").addEventListener("click", logoutLocally);
-  $("#close-local-login").addEventListener("click", closeLocalLoginModal);
+  $("#logout-button").addEventListener("click", logout);
+  $("#google-login-button").addEventListener("click", signInWithGoogle);
+  $("#close-login").addEventListener("click", closeLoginModal);
   $("#close-admin").addEventListener("click", closeAdminModal);
   $("#open-random").addEventListener("click", openRandomModal);
   $("#close-random").addEventListener("click", closeRandomModal);
@@ -1115,8 +1201,8 @@ function bindEvents() {
   $("#random-modal").addEventListener("click", (event) => {
     if (event.target.id === "random-modal") closeRandomModal();
   });
-  $("#local-login-modal").addEventListener("click", (event) => {
-    if (event.target.id === "local-login-modal") closeLocalLoginModal();
+  $("#login-modal").addEventListener("click", (event) => {
+    if (event.target.id === "login-modal") closeLoginModal();
   });
   $("#admin-modal").addEventListener("click", (event) => {
     if (event.target.id === "admin-modal") closeAdminModal();
@@ -1141,26 +1227,19 @@ function bindEvents() {
     }
   });
 
-  $("#local-login-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (loginLocally($("#local-login-email").value)) {
-      closeLocalLoginModal();
-    }
-  });
-
   document.querySelectorAll("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", () => setAdminTab(button.dataset.adminTab));
   });
 
-  $("#editor-form").addEventListener("submit", (event) => {
+  $("#editor-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    addEditorEmail($("#editor-email").value);
+    await addEditorEmail($("#editor-email").value);
   });
 
-  $("#editor-list").addEventListener("click", (event) => {
+  $("#editor-list").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-remove-editor]");
     if (!button) return;
-    removeEditorEmail(button.dataset.removeEditor);
+    await removeEditorEmail(button.dataset.removeEditor);
   });
 
   $("#up-event-form").addEventListener("submit", (event) => {
@@ -1235,7 +1314,7 @@ function bindEvents() {
     if (event.key === "Escape") {
       setAuthMenu(false);
       setFabMenu(false);
-      if (!$("#local-login-modal").hidden) closeLocalLoginModal();
+      if (!$("#login-modal").hidden) closeLoginModal();
       if (!$("#admin-modal").hidden) closeAdminModal();
       if (!$("#random-modal").hidden) closeRandomModal();
       if (!$("#add-one-modal").hidden) closeAddOneModal();
@@ -1250,3 +1329,4 @@ populateCategorySelects();
 bindRatingPickers();
 updateAuthUi();
 render();
+initAuth();
