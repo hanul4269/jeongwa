@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101319">
+  <meta name="description" content="정와 노래책 검색과 랜덤뽑기">
+  <title>정와 노래책</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="정와 노래책 홈">
+      <span class="brand-mark">♪</span>
+      <span>정와 노래책</span>
+    </a>
+    <div class="header-actions">
+      <nav class="header-links" aria-label="정와 외부 링크">
+        <a class="header-link" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer" aria-label="SOOP 방송국" title="SOOP 방송국">
+          <svg class="header-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="7" width="14" height="10" rx="2.4"></rect>
+            <path d="M17 10.2 21 8v8l-4-2.2z"></path>
+            <text x="5.2" y="14" font-size="4.1" font-weight="900" stroke="none" fill="currentColor">LIVE</text>
+          </svg>
+        </a>
+        <a class="header-link" href="https://www.youtube.com/@Jeong_wa/featured" target="_blank" rel="noopener noreferrer" aria-label="유튜브" title="유튜브">
+          <svg class="header-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.2" y="6.5" width="17.6" height="11" rx="2.4"></rect>
+            <path d="m10 9.5 5.2 2.5-5.2 2.5z" fill="currentColor" stroke="none"></path>
+          </svg>
+        </a>
+        <a class="header-link" href="https://cafe.naver.com/jeongwa" target="_blank" rel="noopener noreferrer" aria-label="네이버 카페" title="네이버 카페">
+          <svg class="header-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 10h10v4.7A4.3 4.3 0 0 1 11.7 19H10.3A4.3 4.3 0 0 1 6 14.7z" fill="currentColor" stroke="none"></path>
+            <path d="M16 11h1.3a2.7 2.7 0 0 1 0 5.4H16"></path>
+            <path d="M9.6 5.2c.9-.8 2.6-.6 3.6-1.5.1 1.2-.5 2.5-1.6 3-1 .5-2.2.1-3 .9-.1-.9.3-1.7 1-2.4z" fill="currentColor" stroke="none"></path>
+          </svg>
+        </a>
+        <a class="header-link" href="https://fancim.me/celeb/profile.aspx?cu_id=jeongwa" target="_blank" rel="noopener noreferrer" aria-label="팬심" title="팬심">
+          <svg class="header-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="10" width="16" height="10" rx="1.8"></rect>
+            <path d="M3 10h18"></path>
+            <path d="M12 7v13"></path>
+            <path d="M12 7H8.5A2.2 2.2 0 1 1 10.1 3.3C11.2 4.3 12 7 12 7z"></path>
+            <path d="M12 7h3.5A2.2 2.2 0 1 0 13.9 3.3C12.8 4.3 12 7 12 7z"></path>
+          </svg>
+        </a>
+      </nav>
+      <div class="auth-area" id="auth-area">
+        <button class="auth-button" id="auth-button" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="auth-dot" aria-hidden="true"></span>
+          <span id="auth-label">로그인</span>
+        </button>
+        <div class="auth-menu" id="auth-menu" hidden>
+          <div class="auth-menu-user" id="auth-menu-user"></div>
+          <button id="open-admin-settings" type="button">편집설정</button>
+          <button id="logout-button" type="button">로그아웃</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="banner" aria-label="정와 노래책 배너">
+      <img src="banner.png" alt="JEONG">
+    </section>
+
+    <section class="intro">
+      <div class="intro-copy">
+        <h1><span aria-hidden="true">♪</span> 정와 노래책</h1>
+        <ul>
+          <li>1절 100개 / 완곡 175개 / 고음곡 300개</li>
+          <li>숙제곡 1000개 (현재는 밀린 숙제곡이 많아 받지 않습니다)</li>
+          <li>일부분만 아는 노래가 있을 수 있습니다</li>
+          <li>컨디션에 따라 거절할 수 있습니다</li>
+          <li>각 탭에서 ‘오른쪽 상단 돋보기 모양’으로 검색 가능합니다</li>
+          <li>노래책에 없는 노래는 채팅으로 먼저 여쭤보신 후 신청해주세요</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="songbook" aria-labelledby="songbook-title">
+      <div class="songbook-head">
+        <div>
+          <h2 id="songbook-title">곡 리스트</h2>
+          <p id="result-summary" aria-live="polite"></p>
+        </div>
+        <div class="songbook-tools">
+          <button class="random-btn" id="open-random" type="button">
+            <span aria-hidden="true">♪</span>
+            랜덤뽑기
+          </button>
+          <label class="search-box">
+            <span class="search-glyph" aria-hidden="true"></span>
+            <input id="song-search" type="search" autocomplete="off" placeholder="제목, 아티스트, 메모 검색">
+            <button id="clear-search" type="button" aria-label="검색어 지우기">×</button>
+          </label>
+        </div>
+      </div>
+
+      <nav class="tabs" id="category-tabs" aria-label="노래 분류"></nav>
+
+      <div class="table-wrap" id="table-wrap">
+        <table class="song-table">
+          <thead>
+            <tr>
+              <th>분류</th>
+              <th>노래 제목</th>
+              <th>아티스트</th>
+              <th>Inst</th>
+              <th>정와클립</th>
+              <th>숙련도</th>
+              <th>메모</th>
+            </tr>
+          </thead>
+          <tbody id="song-table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="card-list" id="song-card-list"></div>
+      <div class="empty-state" id="empty-state" hidden>검색 결과가 없습니다.</div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="random-modal" hidden>
+    <section class="random-modal" role="dialog" aria-modal="true" aria-labelledby="random-title">
+      <button class="modal-close" id="close-random" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">랜덤뽑기</div>
+      <h2 id="random-title">오늘의 한 곡</h2>
+
+      <div class="random-options">
+        <label>
+          <input type="radio" name="random-scope" value="current" checked>
+          현재 탭/검색 결과
+        </label>
+        <label>
+          <input type="radio" name="random-scope" value="all">
+          전체 곡
+        </label>
+        <label>
+          <input type="checkbox" id="exclude-homework">
+          숙제곡 제외
+        </label>
+      </div>
+
+      <p class="random-count" id="random-count"></p>
+      <div class="random-result" id="random-result">
+        <span class="result-placeholder">버튼을 누르면 곡이 뽑힙니다.</span>
+      </div>
+      <button class="draw-btn" id="draw-random" type="button">뽑기</button>
+    </section>
+  </div>
+
+  <div class="add-fab-wrap" id="add-fab-wrap">
+    <div class="add-fab-menu" id="add-fab-menu" hidden>
+      <button class="fab-menu-btn" id="open-add-one" type="button">한 곡 추가</button>
+      <button class="fab-menu-btn" id="open-add-many" type="button">여러 곡 추가</button>
+    </div>
+    <button class="add-fab" id="add-fab" type="button" aria-label="곡 추가 메뉴 열기" aria-expanded="false" aria-controls="add-fab-menu">
+      <span aria-hidden="true">+</span>
+    </button>
+  </div>
+
+  <div class="modal-backdrop" id="local-login-modal" hidden>
+    <section class="form-modal compact" role="dialog" aria-modal="true" aria-labelledby="local-login-title">
+      <button class="modal-close" id="close-local-login" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">계정</div>
+      <h2 id="local-login-title">로그인</h2>
+      <form id="local-login-form" class="song-form">
+        <label>
+          <span>이메일</span>
+          <input id="local-login-email" name="email" type="email" autocomplete="email" required>
+        </label>
+        <p class="form-status" id="local-login-status" aria-live="polite"></p>
+        <button class="draw-btn" type="submit">로그인</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="admin-modal" hidden>
+    <section class="form-modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <button class="modal-close" id="close-admin" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">편집설정</div>
+      <h2 id="admin-title">편집설정</h2>
+
+      <div class="admin-tabs" role="tablist" aria-label="편집설정 메뉴">
+        <button class="admin-tab active" id="admin-tab-editors" type="button" role="tab" aria-selected="true" aria-controls="admin-panel-editors" data-admin-tab="editors">편집자 관리</button>
+        <button class="admin-tab" id="admin-tab-up" type="button" role="tab" aria-selected="false" aria-controls="admin-panel-up" data-admin-tab="up">UP 이벤트</button>
+      </div>
+
+      <div class="admin-panel active" id="admin-panel-editors" role="tabpanel" aria-labelledby="admin-tab-editors" data-admin-panel="editors">
+        <form id="editor-form" class="song-form inline-form">
+          <label>
+            <span>편집자 이메일</span>
+            <input id="editor-email" name="email" type="email" autocomplete="off" required>
+          </label>
+          <button class="draw-btn" type="submit">추가</button>
+        </form>
+        <p class="form-status" id="editor-status" aria-live="polite"></p>
+        <div class="editor-list" id="editor-list"></div>
+      </div>
+
+      <div class="admin-panel" id="admin-panel-up" role="tabpanel" aria-labelledby="admin-tab-up" data-admin-panel="up" hidden>
+        <form id="up-event-form" class="song-form">
+          <input id="up-event-id" name="id" type="hidden">
+          <label>
+            <span>이벤트 제목</span>
+            <input id="up-event-title" name="title" type="text" required>
+          </label>
+          <div class="form-grid">
+            <label>
+              <span>시작일</span>
+              <input id="up-event-start" name="startDate" type="date">
+            </label>
+            <label>
+              <span>종료일</span>
+              <input id="up-event-end" name="endDate" type="date">
+            </label>
+          </div>
+          <label>
+            <span>상태</span>
+            <select id="up-event-status-select" name="status">
+              <option value="진행중">진행중</option>
+              <option value="예정">예정</option>
+              <option value="종료">종료</option>
+            </select>
+          </label>
+          <label>
+            <span>메모</span>
+            <textarea id="up-event-memo" name="memo" rows="2"></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="draw-btn" type="submit">저장</button>
+            <button class="secondary-btn" id="clear-up-event-form" type="button">새 이벤트</button>
+          </div>
+        </form>
+        <div class="up-event-list" id="up-event-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="add-one-modal" hidden>
+    <section class="form-modal" role="dialog" aria-modal="true" aria-labelledby="add-one-title">
+      <button class="modal-close" id="close-add-one" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">노래 추가</div>
+      <h2 id="add-one-title">한 곡 추가</h2>
+      <form id="add-one-form" class="song-form">
+        <label>
+          <span>분류</span>
+          <select id="one-category" name="category"></select>
+        </label>
+        <label>
+          <span>노래 제목</span>
+          <input id="one-title" name="title" type="text" required>
+        </label>
+        <label>
+          <span>아티스트</span>
+          <input id="one-artist" name="artist" type="text">
+        </label>
+        <div class="form-grid">
+          <label>
+            <span>Inst</span>
+            <input id="one-inst" name="instUrl" type="url" inputmode="url">
+          </label>
+          <label>
+            <span>정와클립</span>
+            <input id="one-clip" name="jeongwaClipUrl" type="url" inputmode="url">
+          </label>
+        </div>
+        <label>
+          <span>숙련도</span>
+          <input id="one-skill" name="skillLevel" type="hidden" value="0">
+          <div class="skill-picker" data-rating-for="one-skill" role="radiogroup" aria-label="숙련도">
+            <button type="button" class="skill-pick" data-level="1" aria-label="숙련도 1단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="2" aria-label="숙련도 2단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="3" aria-label="숙련도 3단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="4" aria-label="숙련도 4단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="5" aria-label="숙련도 5단계">🐟</button>
+          </div>
+        </label>
+        <label>
+          <span>메모</span>
+          <textarea id="one-memo" name="memo" rows="3"></textarea>
+        </label>
+        <button class="draw-btn" type="submit">추가</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="add-many-modal" hidden>
+    <section class="form-modal wide" role="dialog" aria-modal="true" aria-labelledby="add-many-title">
+      <button class="modal-close" id="close-add-many" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">노래 추가</div>
+      <h2 id="add-many-title">여러 곡 추가</h2>
+      <form id="add-many-form" class="song-form">
+        <label>
+          <span>기본 분류</span>
+          <select id="many-category" name="category"></select>
+        </label>
+        <label>
+          <span>곡 목록</span>
+          <textarea id="many-rows" name="rows" rows="12" placeholder="분류	노래 제목	아티스트	Inst	정와클립	숙련도	메모"></textarea>
+        </label>
+        <p class="form-status" id="many-status" aria-live="polite"></p>
+        <button class="draw-btn" type="submit">추가</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="edit-song-modal" hidden>
+    <section class="form-modal" role="dialog" aria-modal="true" aria-labelledby="edit-song-title">
+      <button class="modal-close" id="close-edit-song" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">노래 수정</div>
+      <h2 id="edit-song-title">곡 정보 수정</h2>
+      <form id="edit-song-form" class="song-form">
+        <input id="edit-id" name="id" type="hidden">
+        <label>
+          <span>분류</span>
+          <select id="edit-category" name="category"></select>
+        </label>
+        <label>
+          <span>노래 제목</span>
+          <input id="edit-title" name="title" type="text" required>
+        </label>
+        <label>
+          <span>아티스트</span>
+          <input id="edit-artist" name="artist" type="text">
+        </label>
+        <div class="form-grid">
+          <label>
+            <span>Inst</span>
+            <input id="edit-inst" name="instUrl" type="url" inputmode="url">
+          </label>
+          <label>
+            <span>정와클립</span>
+            <input id="edit-clip" name="jeongwaClipUrl" type="url" inputmode="url">
+          </label>
+        </div>
+        <label>
+          <span>숙련도</span>
+          <input id="edit-skill" name="skillLevel" type="hidden" value="0">
+          <div class="skill-picker" data-rating-for="edit-skill" role="radiogroup" aria-label="숙련도">
+            <button type="button" class="skill-pick" data-level="1" aria-label="숙련도 1단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="2" aria-label="숙련도 2단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="3" aria-label="숙련도 3단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="4" aria-label="숙련도 4단계">🐟</button>
+            <button type="button" class="skill-pick" data-level="5" aria-label="숙련도 5단계">🐟</button>
+          </div>
+        </label>
+        <label>
+          <span>메모</span>
+          <textarea id="edit-memo" name="memo" rows="3"></textarea>
+        </label>
+        <button class="draw-btn" type="submit">저장</button>
+        <button class="secondary-btn" id="reset-edit-song" type="button" hidden>원래대로</button>
+      </form>
+    </section>
+  </div>
+
+  <script src="songs-data.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
