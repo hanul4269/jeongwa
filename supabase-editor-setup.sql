@@ -71,3 +71,152 @@ using (public.jeongwa_is_owner());
 insert into public.editors (email)
 values ('jeongwazzang@gmail.com')
 on conflict (email) do nothing;
+
+create table if not exists public.song_changes (
+  id text primary key,
+  record_type text not null check (record_type in ('custom', 'override')),
+  source_song_id text,
+  category text not null check (category in ('K-POP', 'J-POP', 'POP/OST', '숙제곡')),
+  title text not null,
+  artist text not null default '',
+  inst_url text not null default '',
+  jeongwa_clip_url text not null default '',
+  skill_level smallint not null default 0 check (skill_level between 0 and 5),
+  memo text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users(id) on delete set null,
+  constraint song_changes_override_source check (
+    (record_type = 'override' and source_song_id is not null)
+    or (record_type = 'custom' and source_song_id is null)
+  )
+);
+
+create unique index if not exists song_changes_source_song_id_key
+on public.song_changes (source_song_id)
+where source_song_id is not null;
+
+alter table public.song_changes enable row level security;
+
+revoke all on table public.song_changes from anon;
+grant select on table public.song_changes to anon;
+grant select, insert, update, delete on table public.song_changes to authenticated;
+
+drop policy if exists "Everyone can read song changes" on public.song_changes;
+create policy "Everyone can read song changes"
+on public.song_changes
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Editors can add song changes" on public.song_changes;
+create policy "Editors can add song changes"
+on public.song_changes
+for insert
+to authenticated
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can update song changes" on public.song_changes;
+create policy "Editors can update song changes"
+on public.song_changes
+for update
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor())
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can remove song changes" on public.song_changes;
+create policy "Editors can remove song changes"
+on public.song_changes
+for delete
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+create table if not exists public.up_events (
+  id text primary key,
+  title text not null,
+  start_date date,
+  end_date date,
+  status text not null default '진행중' check (status in ('예정', '진행중', '종료')),
+  memo text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid default auth.uid() references auth.users(id) on delete set null
+);
+
+create table if not exists public.up_entries (
+  id text primary key,
+  event_id text not null references public.up_events(id) on delete cascade,
+  nickname text not null default '',
+  song_title text not null default '',
+  up_count integer not null default 0 check (up_count >= 0),
+  memo text not null default '',
+  created_at timestamptz not null default now(),
+  created_by uuid default auth.uid() references auth.users(id) on delete set null,
+  constraint up_entries_name_or_song check (nickname <> '' or song_title <> '')
+);
+
+alter table public.up_events enable row level security;
+alter table public.up_entries enable row level security;
+
+revoke all on table public.up_events from anon;
+revoke all on table public.up_entries from anon;
+grant select, insert, update, delete on table public.up_events to authenticated;
+grant select, insert, update, delete on table public.up_entries to authenticated;
+
+drop policy if exists "Editors can read UP events" on public.up_events;
+create policy "Editors can read UP events"
+on public.up_events
+for select
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can add UP events" on public.up_events;
+create policy "Editors can add UP events"
+on public.up_events
+for insert
+to authenticated
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can update UP events" on public.up_events;
+create policy "Editors can update UP events"
+on public.up_events
+for update
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor())
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can remove UP events" on public.up_events;
+create policy "Editors can remove UP events"
+on public.up_events
+for delete
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can read UP entries" on public.up_entries;
+create policy "Editors can read UP entries"
+on public.up_entries
+for select
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can add UP entries" on public.up_entries;
+create policy "Editors can add UP entries"
+on public.up_entries
+for insert
+to authenticated
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can update UP entries" on public.up_entries;
+create policy "Editors can update UP entries"
+on public.up_entries
+for update
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor())
+with check (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Editors can remove UP entries" on public.up_entries;
+create policy "Editors can remove UP entries"
+on public.up_entries
+for delete
+to authenticated
+using (public.jeongwa_is_owner() or public.jeongwa_is_editor());

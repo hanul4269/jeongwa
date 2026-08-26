@@ -233,6 +233,7 @@
             <button class="draw-btn" type="submit">저장</button>
             <button class="secondary-btn" id="clear-up-event-form" type="button">새 이벤트</button>
           </div>
+          <p class="form-status" id="up-event-status" aria-live="polite"></p>
         </form>
         <div class="up-event-list" id="up-event-list"></div>
       </div>
@@ -282,6 +283,7 @@
           <span>메모</span>
           <textarea id="one-memo" name="memo" rows="3"></textarea>
         </label>
+        <p class="form-status" id="one-status" aria-live="polite"></p>
         <button class="draw-btn" type="submit">추가</button>
       </form>
     </section>
@@ -351,6 +353,7 @@
           <span>메모</span>
           <textarea id="edit-memo" name="memo" rows="3"></textarea>
         </label>
+        <p class="form-status" id="edit-status" aria-live="polite"></p>
         <button class="draw-btn" type="submit">저장</button>
         <button class="secondary-btn" id="reset-edit-song" type="button" hidden>원래대로</button>
       </form>

@@ -18,14 +18,18 @@ const state = {
   query: "",
 };
 
-let customSongs = loadCustomSongs();
-let editedSongsById = loadEditedSongs();
+let legacyCustomSongs = loadCustomSongs();
+let legacyEditedSongsById = loadEditedSongs();
+let legacyUpEvents = loadUpEvents();
+let customSongs = [...legacyCustomSongs];
+let editedSongsById = { ...legacyEditedSongsById };
 let songs = mergeSongs();
 let authUser = null;
 let editorEmails = [];
 const ownerEmail = OWNER_EMAIL;
-let upEvents = loadUpEvents();
+let upEvents = [...legacyUpEvents];
 let activeAdminTab = "editors";
+let legacyMigrationPromise = null;
 
 const authDb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
@@ -101,10 +105,6 @@ function loadUpEvents() {
   }
 }
 
-function saveUpEvents() {
-  localStorage.setItem(upEventsStorageKey, JSON.stringify(upEvents));
-}
-
 function loadCustomSongs() {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
@@ -114,10 +114,6 @@ function loadCustomSongs() {
   } catch {
     return [];
   }
-}
-
-function saveCustomSongs() {
-  localStorage.setItem(storageKey, JSON.stringify(customSongs));
 }
 
 function loadEditedSongs() {
@@ -136,10 +132,6 @@ function loadEditedSongs() {
   } catch {
     return {};
   }
-}
-
-function saveEditedSongs() {
-  localStorage.setItem(editsStorageKey, JSON.stringify(editedSongsById));
 }
 
 function applyStoredEdit(song) {
@@ -224,6 +216,235 @@ function normalizeUpEvent(event) {
     memo: clean(event.memo),
     entries,
   };
+}
+
+function hasLegacyData() {
+  return legacyCustomSongs.length > 0
+    || Object.keys(legacyEditedSongsById).length > 0
+    || legacyUpEvents.length > 0;
+}
+
+function clearLegacyData() {
+  legacyCustomSongs = [];
+  legacyEditedSongsById = {};
+  legacyUpEvents = [];
+  localStorage.removeItem(storageKey);
+  localStorage.removeItem(editsStorageKey);
+  localStorage.removeItem(upEventsStorageKey);
+}
+
+function songChangeId(songId) {
+  return `base:${String(songId)}`;
+}
+
+function songToChangeRow(song, recordType) {
+  const normalized = normalizeSongRecord(song);
+  const isOverride = recordType === "override";
+  return {
+    id: isOverride ? songChangeId(normalized.id) : String(normalized.id),
+    record_type: recordType,
+    source_song_id: isOverride ? String(normalized.id) : null,
+    category: normalized.category,
+    title: normalized.title,
+    artist: normalized.artist,
+    inst_url: normalized.instUrl,
+    jeongwa_clip_url: normalized.jeongwaClipUrl,
+    skill_level: normalized.skillLevel,
+    memo: normalized.memo,
+    updated_at: new Date().toISOString(),
+    updated_by: authUser?.id || null,
+  };
+}
+
+function songFromChangeRow(row) {
+  const custom = row.record_type === "custom";
+  return normalizeSongRecord({
+    id: custom ? row.id : row.source_song_id,
+    category: row.category,
+    title: row.title,
+    artist: row.artist,
+    instUrl: row.inst_url,
+    jeongwaClipUrl: row.jeongwa_clip_url,
+    skillLevel: row.skill_level,
+    memo: row.memo,
+    custom,
+    edited: !custom,
+  });
+}
+
+function upEventToRow(event) {
+  const normalized = normalizeUpEvent(event);
+  return {
+    id: String(normalized.id),
+    title: normalized.title,
+    start_date: normalized.startDate || null,
+    end_date: normalized.endDate || null,
+    status: normalized.status,
+    memo: normalized.memo,
+    updated_at: new Date().toISOString(),
+    updated_by: authUser?.id || null,
+  };
+}
+
+function upEntryToRow(eventId, entry) {
+  const normalized = normalizeUpEntry(entry);
+  return {
+    id: String(normalized.id),
+    event_id: String(eventId),
+    nickname: normalized.nickname,
+    song_title: normalized.songTitle,
+    up_count: normalized.upCount,
+    memo: normalized.memo,
+    created_by: authUser?.id || null,
+  };
+}
+
+function upEventFromRows(row, entries) {
+  return normalizeUpEvent({
+    id: row.id,
+    title: row.title,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    status: row.status,
+    memo: row.memo,
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      nickname: entry.nickname,
+      songTitle: entry.song_title,
+      upCount: entry.up_count,
+      memo: entry.memo,
+    })),
+  });
+}
+
+async function refreshSharedSongData() {
+  const { data, error } = await authDb
+    .from("song_changes")
+    .select("id, record_type, source_song_id, category, title, artist, inst_url, jeongwa_clip_url, skill_level, memo, created_at")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("공유 노래 데이터를 불러오지 못했습니다.", error.message);
+    return false;
+  }
+
+  const remoteCustomSongs = [];
+  const remoteEditedSongs = {};
+
+  (data || []).forEach((row) => {
+    const song = songFromChangeRow(row);
+    if (song.custom) {
+      remoteCustomSongs.push(song);
+    } else {
+      remoteEditedSongs[String(song.id)] = song;
+    }
+  });
+
+  const customIds = new Set(remoteCustomSongs.map((song) => String(song.id)));
+  customSongs = [
+    ...remoteCustomSongs,
+    ...legacyCustomSongs.filter((song) => !customIds.has(String(song.id))),
+  ];
+  editedSongsById = { ...remoteEditedSongs };
+  Object.entries(legacyEditedSongsById).forEach(([id, song]) => {
+    if (!editedSongsById[id]) editedSongsById[id] = song;
+  });
+
+  refreshSongs();
+  render();
+  updateRandomCount();
+  return true;
+}
+
+async function refreshSharedUpEvents() {
+  if (!canEdit()) {
+    upEvents = [];
+    return true;
+  }
+
+  const [eventsResult, entriesResult] = await Promise.all([
+    authDb
+      .from("up_events")
+      .select("id, title, start_date, end_date, status, memo, created_at")
+      .order("created_at", { ascending: false }),
+    authDb
+      .from("up_entries")
+      .select("id, event_id, nickname, song_title, up_count, memo, created_at")
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (eventsResult.error || entriesResult.error) {
+    console.warn(
+      "공유 UP 이벤트를 불러오지 못했습니다.",
+      eventsResult.error?.message || entriesResult.error?.message,
+    );
+    return false;
+  }
+
+  const entriesByEvent = new Map();
+  (entriesResult.data || []).forEach((entry) => {
+    const entries = entriesByEvent.get(entry.event_id) || [];
+    entries.push(entry);
+    entriesByEvent.set(entry.event_id, entries);
+  });
+
+  const remoteEvents = (eventsResult.data || []).map((event) => (
+    upEventFromRows(event, entriesByEvent.get(event.id) || [])
+  ));
+  const remoteIds = new Set(remoteEvents.map((event) => String(event.id)));
+  upEvents = [
+    ...remoteEvents,
+    ...legacyUpEvents.filter((event) => !remoteIds.has(String(event.id))),
+  ];
+  renderUpEvents();
+  return true;
+}
+
+async function migrateLegacyData() {
+  if (!canEdit() || !hasLegacyData()) return true;
+  if (legacyMigrationPromise) return legacyMigrationPromise;
+
+  legacyMigrationPromise = (async () => {
+    const songRows = [
+      ...legacyCustomSongs.map((song) => songToChangeRow(song, "custom")),
+      ...Object.values(legacyEditedSongsById).map((song) => songToChangeRow(song, "override")),
+    ];
+    const eventRows = legacyUpEvents.map(upEventToRow);
+    const entryRows = legacyUpEvents.flatMap((event) => (
+      event.entries.map((entry) => upEntryToRow(event.id, entry))
+    ));
+
+    if (songRows.length) {
+      const { error } = await authDb
+        .from("song_changes")
+        .upsert(songRows, { onConflict: "id", ignoreDuplicates: true });
+      if (error) throw error;
+    }
+
+    if (eventRows.length) {
+      const { error } = await authDb
+        .from("up_events")
+        .upsert(eventRows, { onConflict: "id", ignoreDuplicates: true });
+      if (error) throw error;
+    }
+
+    if (entryRows.length) {
+      const { error } = await authDb
+        .from("up_entries")
+        .upsert(entryRows, { onConflict: "id", ignoreDuplicates: true });
+      if (error) throw error;
+    }
+
+    clearLegacyData();
+    return true;
+  })().catch((error) => {
+    console.warn("기존 브라우저 데이터를 옮기지 못했습니다.", error.message);
+    return false;
+  }).finally(() => {
+    legacyMigrationPromise = null;
+  });
+
+  return legacyMigrationPromise;
 }
 
 function categoryClass(category) {
@@ -449,6 +670,7 @@ async function logout() {
   await authDb.auth.signOut();
   authUser = null;
   editorEmails = [];
+  upEvents = [];
   setAuthMenu(false);
   setFabMenu(false);
   closeAddOneModal();
@@ -490,6 +712,13 @@ async function applyAuthSession(session) {
     : null;
 
   await refreshEditorEmails();
+  if (canEdit()) {
+    await migrateLegacyData();
+    await Promise.all([refreshSharedSongData(), refreshSharedUpEvents()]);
+  } else {
+    await refreshSharedSongData();
+    upEvents = [];
+  }
   updateAuthUi();
   render();
 }
@@ -754,6 +983,7 @@ function clearUpEventForm() {
   $("#up-event-form").reset();
   $("#up-event-id").value = "";
   $("#up-event-status-select").value = "진행중";
+  $("#up-event-status").textContent = "";
 }
 
 function editUpEvent(eventId) {
@@ -769,26 +999,45 @@ function editUpEvent(eventId) {
   $("#up-event-title").focus();
 }
 
-function saveUpEvent(form) {
+async function saveUpEvent(form) {
   const event = upEventFromForm(form);
-  if (!event.title) return;
+  if (!event.title) return false;
+
+  const { error } = await authDb
+    .from("up_events")
+    .upsert(upEventToRow(event), { onConflict: "id" });
+
+  if (error) {
+    $("#up-event-status").textContent = `저장하지 못했습니다: ${error.message}`;
+    return false;
+  }
 
   const exists = upEvents.some((item) => item.id === event.id);
   upEvents = exists
     ? upEvents.map((item) => (item.id === event.id ? event : item))
     : [event, ...upEvents];
-  saveUpEvents();
   clearUpEventForm();
   renderUpEvents();
+  return true;
 }
 
-function deleteUpEvent(eventId) {
+async function deleteUpEvent(eventId) {
+  const { error } = await authDb
+    .from("up_events")
+    .delete()
+    .eq("id", String(eventId));
+
+  if (error) {
+    $("#up-event-status").textContent = `삭제하지 못했습니다: ${error.message}`;
+    return false;
+  }
+
   upEvents = upEvents.filter((event) => event.id !== eventId);
-  saveUpEvents();
   renderUpEvents();
+  return true;
 }
 
-function addUpEntry(form) {
+async function addUpEntry(form) {
   const eventId = form.dataset.eventId;
   const data = new FormData(form);
   const entry = normalizeUpEntry({
@@ -798,23 +1047,42 @@ function addUpEntry(form) {
     memo: data.get("memo"),
   });
 
-  if (!entry.nickname && !entry.songTitle) return;
+  if (!entry.nickname && !entry.songTitle) return false;
+
+  const { error } = await authDb
+    .from("up_entries")
+    .insert(upEntryToRow(eventId, entry));
+
+  if (error) {
+    $("#up-event-status").textContent = `참여자를 등록하지 못했습니다: ${error.message}`;
+    return false;
+  }
 
   upEvents = upEvents.map((event) => (
     event.id === eventId ? { ...event, entries: [entry, ...event.entries] } : event
   ));
-  saveUpEvents();
   renderUpEvents();
+  return true;
 }
 
-function deleteUpEntry(eventId, entryId) {
+async function deleteUpEntry(eventId, entryId) {
+  const { error } = await authDb
+    .from("up_entries")
+    .delete()
+    .eq("id", String(entryId));
+
+  if (error) {
+    $("#up-event-status").textContent = `참여자를 삭제하지 못했습니다: ${error.message}`;
+    return false;
+  }
+
   upEvents = upEvents.map((event) => (
     event.id === eventId
       ? { ...event, entries: event.entries.filter((entry) => entry.id !== entryId) }
       : event
   ));
-  saveUpEvents();
   renderUpEvents();
+  return true;
 }
 
 function ratingInputForPicker(picker) {
@@ -952,6 +1220,7 @@ function openAddOneModal() {
   $("#one-category").value = state.category;
   $("#add-one-form").reset();
   $("#one-category").value = state.category;
+  $("#one-status").textContent = "";
   setRatingValue("one-skill", 0);
   openModal("#add-one-modal");
   $("#one-title").focus();
@@ -994,6 +1263,7 @@ function setEditFormValues(song) {
   $("#edit-clip").value = song.jeongwaClipUrl || "";
   setRatingValue("edit-skill", skillValue(song));
   $("#edit-memo").value = memoText(song);
+  $("#edit-status").textContent = "";
   $("#reset-edit-song").hidden = song.custom || !isEditedBaseSong(song.id);
 }
 
@@ -1023,7 +1293,7 @@ function openSongEditFromElement(element) {
   if (target) openEditSongModal(target.dataset.songId);
 }
 
-function updateSong(songId, updates) {
+async function updateSong(songId, updates) {
   const original = findSongById(songId);
   if (!original) return false;
 
@@ -1037,14 +1307,22 @@ function updateSong(songId, updates) {
 
   if (!normalized.title) return false;
 
+  const recordType = original.custom ? "custom" : "override";
+  const { error } = await authDb
+    .from("song_changes")
+    .upsert(songToChangeRow(normalized, recordType), { onConflict: "id" });
+
+  if (error) {
+    $("#edit-status").textContent = `저장하지 못했습니다: ${error.message}`;
+    return false;
+  }
+
   if (original.custom) {
     customSongs = customSongs.map((song) => (
       String(song.id) === String(songId) ? normalized : song
     ));
-    saveCustomSongs();
   } else {
     editedSongsById[String(original.id)] = normalized;
-    saveEditedSongs();
   }
 
   state.category = normalized.category;
@@ -1054,9 +1332,18 @@ function updateSong(songId, updates) {
   return true;
 }
 
-function resetEditedSong(songId) {
+async function resetEditedSong(songId) {
+  const { error } = await authDb
+    .from("song_changes")
+    .delete()
+    .eq("id", songChangeId(songId));
+
+  if (error) {
+    $("#edit-status").textContent = `원래대로 되돌리지 못했습니다: ${error.message}`;
+    return false;
+  }
+
   delete editedSongsById[String(songId)];
-  saveEditedSongs();
   refreshSongs();
 
   const restored = findSongById(songId);
@@ -1066,20 +1353,26 @@ function resetEditedSong(songId) {
 
   render();
   updateRandomCount();
+  return true;
 }
 
-function addCustomSongs(newSongs) {
+async function addCustomSongs(newSongs) {
   const now = Date.now();
   const normalized = newSongs.map((song, index) => normalizeSongRecord({
     ...song,
-    id: `custom-${now}-${index}`,
+    id: `custom-${now}-${index}-${Math.random().toString(36).slice(2, 8)}`,
     custom: true,
   })).filter((song) => song.title);
 
   if (!normalized.length) return 0;
 
+  const { error } = await authDb
+    .from("song_changes")
+    .insert(normalized.map((song) => songToChangeRow(song, "custom")));
+
+  if (error) throw error;
+
   customSongs = [...customSongs, ...normalized];
-  saveCustomSongs();
   refreshSongs();
   render();
   updateRandomCount();
@@ -1242,14 +1535,14 @@ function bindEvents() {
     await removeEditorEmail(button.dataset.removeEditor);
   });
 
-  $("#up-event-form").addEventListener("submit", (event) => {
+  $("#up-event-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    saveUpEvent(event.currentTarget);
+    await saveUpEvent(event.currentTarget);
   });
 
   $("#clear-up-event-form").addEventListener("click", clearUpEventForm);
 
-  $("#up-event-list").addEventListener("click", (event) => {
+  $("#up-event-list").addEventListener("click", async (event) => {
     const editButton = event.target.closest("[data-edit-up-event]");
     const deleteButton = event.target.closest("[data-delete-up-event]");
     const deleteEntryButton = event.target.closest("[data-delete-up-entry]");
@@ -1260,50 +1553,61 @@ function bindEvents() {
     }
 
     if (deleteButton) {
-      deleteUpEvent(deleteButton.dataset.deleteUpEvent);
+      await deleteUpEvent(deleteButton.dataset.deleteUpEvent);
       return;
     }
 
     if (deleteEntryButton) {
-      deleteUpEntry(deleteEntryButton.dataset.eventId, deleteEntryButton.dataset.deleteUpEntry);
+      await deleteUpEntry(deleteEntryButton.dataset.eventId, deleteEntryButton.dataset.deleteUpEntry);
     }
   });
 
-  $("#up-event-list").addEventListener("submit", (event) => {
+  $("#up-event-list").addEventListener("submit", async (event) => {
     const form = event.target.closest(".up-entry-form");
     if (!form) return;
     event.preventDefault();
-    addUpEntry(form);
+    await addUpEntry(form);
   });
 
-  $("#add-one-form").addEventListener("submit", (event) => {
+  $("#add-one-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const count = addCustomSongs([songFromForm(event.currentTarget)]);
-    if (count) closeAddOneModal();
-  });
-
-  $("#add-many-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const rows = parseBulkSongs($("#many-rows").value, $("#many-category").value);
-    const count = addCustomSongs(rows);
-    $("#many-status").textContent = `${count.toLocaleString("ko-KR")}곡 추가됨`;
-    if (count) {
-      $("#many-rows").value = "";
+    $("#one-status").textContent = "저장 중입니다.";
+    try {
+      const count = await addCustomSongs([songFromForm(event.currentTarget)]);
+      if (count) closeAddOneModal();
+    } catch (error) {
+      $("#one-status").textContent = `추가하지 못했습니다: ${error.message}`;
     }
   });
 
-  $("#edit-song-form").addEventListener("submit", (event) => {
+  $("#add-many-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const rows = parseBulkSongs($("#many-rows").value, $("#many-category").value);
+    $("#many-status").textContent = "저장 중입니다.";
+    try {
+      const count = await addCustomSongs(rows);
+      $("#many-status").textContent = `${count.toLocaleString("ko-KR")}곡 추가됨`;
+      if (count) {
+        $("#many-rows").value = "";
+      }
+    } catch (error) {
+      $("#many-status").textContent = `추가하지 못했습니다: ${error.message}`;
+    }
+  });
+
+  $("#edit-song-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const songId = $("#edit-id").value;
-    if (updateSong(songId, songFromForm(event.currentTarget))) {
+    $("#edit-status").textContent = "저장 중입니다.";
+    if (await updateSong(songId, songFromForm(event.currentTarget))) {
       closeEditSongModal();
     }
   });
 
-  $("#reset-edit-song").addEventListener("click", () => {
+  $("#reset-edit-song").addEventListener("click", async () => {
     const songId = $("#edit-id").value;
-    resetEditedSong(songId);
-    closeEditSongModal();
+    $("#edit-status").textContent = "되돌리는 중입니다.";
+    if (await resetEditedSong(songId)) closeEditSongModal();
   });
 
   document.querySelectorAll('input[name="random-scope"], #exclude-homework').forEach((input) => {
@@ -1329,4 +1633,4 @@ populateCategorySelects();
 bindRatingPickers();
 updateAuthUi();
 render();
-initAuth();
+refreshSharedSongData().finally(initAuth);
