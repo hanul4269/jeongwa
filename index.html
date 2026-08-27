@@ -6,16 +6,24 @@
   <meta name="theme-color" content="#101319">
   <meta name="description" content="정와 노래책 검색과 랜덤뽑기">
   <title>정와 노래책</title>
+  <link rel="icon" type="image/png" href="jeongwa-profile.png">
+  <link rel="apple-touch-icon" href="jeongwa-profile.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#top" aria-label="정와 노래책 홈">
-      <span class="brand-mark">♪</span>
-      <span>정와 노래책</span>
-    </a>
+    <div class="brand-area">
+      <a class="brand" href="#top" aria-label="정와 노래책 홈">
+        <span class="brand-mark">♪</span>
+        <span>정와 노래책</span>
+      </a>
+      <a class="live-badge" id="live-badge" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer" aria-label="정와 SOOP 방송국, 현재 방송 상태 확인 중" title="방송 상태 확인 중">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>LIVE</span>
+      </a>
+    </div>
     <div class="header-actions">
       <nav class="header-links" aria-label="정와 외부 링크">
         <a class="header-link" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer" aria-label="SOOP 방송국" title="SOOP 방송국">
@@ -88,25 +96,46 @@
           <p id="result-summary" aria-live="polite"></p>
         </div>
         <div class="songbook-tools">
+          <button class="up-ranking-btn" id="open-up-ranking" type="button" hidden>
+            <span aria-hidden="true">↑</span>
+            UP 랭킹
+          </button>
           <button class="random-btn" id="open-random" type="button">
             <span aria-hidden="true">♪</span>
             랜덤뽑기
           </button>
           <label class="search-box">
             <span class="search-glyph" aria-hidden="true"></span>
-            <input id="song-search" type="search" autocomplete="off" placeholder="제목, 아티스트, 메모 검색">
+            <input id="song-search" type="search" autocomplete="off" placeholder="제목, 아티스트, 태그, 메모 검색">
             <button id="clear-search" type="button" aria-label="검색어 지우기">×</button>
           </label>
+          <div class="view-toggle" id="view-toggle" role="group" aria-label="곡 보기 방식">
+            <button class="view-toggle-btn active" type="button" data-view-mode="list" aria-label="리스트형으로 보기" title="리스트형" aria-pressed="true">
+              <i data-lucide="list" aria-hidden="true"></i>
+            </button>
+            <button class="view-toggle-btn" type="button" data-view-mode="album" aria-label="앨범형으로 보기" title="앨범형" aria-pressed="false">
+              <i data-lucide="layout-grid" aria-hidden="true"></i>
+            </button>
+          </div>
+          <button class="favorite-filter-btn" id="favorite-filter" type="button" aria-label="즐겨찾기한 곡만 보기" title="즐겨찾기만 보기" aria-pressed="false">
+            <i data-lucide="star" aria-hidden="true"></i>
+          </button>
         </div>
       </div>
 
       <nav class="tabs" id="category-tabs" aria-label="노래 분류"></nav>
+
+      <section class="tag-filter" id="tag-filter" aria-label="태그 필터" hidden>
+        <span class="tag-filter-label">태그</span>
+        <div class="tag-filter-list" id="tag-filter-list"></div>
+      </section>
 
       <div class="table-wrap" id="table-wrap">
         <table class="song-table">
           <thead>
             <tr>
               <th>분류</th>
+              <th>커버</th>
               <th>노래 제목</th>
               <th>아티스트</th>
               <th>Inst</th>
@@ -120,6 +149,7 @@
       </div>
 
       <div class="card-list" id="song-card-list"></div>
+      <div class="album-grid" id="album-grid" hidden></div>
       <div class="empty-state" id="empty-state" hidden>검색 결과가 없습니다.</div>
     </section>
   </main>
@@ -157,10 +187,50 @@
     <div class="add-fab-menu" id="add-fab-menu" hidden>
       <button class="fab-menu-btn" id="open-add-one" type="button">한 곡 추가</button>
       <button class="fab-menu-btn" id="open-add-many" type="button">여러 곡 추가</button>
+      <button class="fab-menu-btn" id="open-cover-fill" type="button">커버 자동채우기</button>
     </div>
     <button class="add-fab" id="add-fab" type="button" aria-label="곡 추가 메뉴 열기" aria-expanded="false" aria-controls="add-fab-menu">
       <span aria-hidden="true">+</span>
     </button>
+  </div>
+
+  <div class="modal-backdrop" id="cover-fill-modal" hidden>
+    <section class="form-modal compact" role="dialog" aria-modal="true" aria-labelledby="cover-fill-title">
+      <button class="modal-close" id="close-cover-fill" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">앨범 커버</div>
+      <h2 id="cover-fill-title">커버 자동채우기</h2>
+      <p class="login-copy">iTunes에서 제목과 아티스트가 충분히 일치하는 곡만 채웁니다. 애매한 곡은 건너뜁니다.</p>
+      <label class="cover-fill-scope">
+        <span>대상</span>
+        <select id="cover-fill-scope">
+          <option value="current">현재 탭과 검색 결과</option>
+          <option value="all">전체 곡</option>
+        </select>
+      </label>
+      <progress class="cover-fill-progress" id="cover-fill-progress" value="0" max="1"></progress>
+      <p class="form-status cover-fill-status" id="cover-fill-status" aria-live="polite">커버가 비어 있는 곡만 처리합니다.</p>
+      <div class="form-actions">
+        <button class="draw-btn" id="start-cover-fill" type="button">자동채우기 시작</button>
+        <button class="secondary-btn" id="stop-cover-fill" type="button" disabled>중지</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="up-ranking-modal" hidden>
+    <section class="form-modal up-ranking-modal" role="dialog" aria-modal="true" aria-labelledby="up-ranking-title">
+      <button class="modal-close" id="close-up-ranking" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">SOOP UP 이벤트</div>
+      <div class="up-ranking-heading">
+        <div>
+          <h2 id="up-ranking-title">UP 랭킹</h2>
+          <p id="up-ranking-updated">게시글의 좋아요 순위를 불러옵니다.</p>
+        </div>
+        <button class="secondary-btn compact-btn" id="refresh-up-ranking" type="button">새로고침</button>
+      </div>
+      <div class="up-ranking-tabs" id="up-ranking-tabs" role="tablist" aria-label="UP 이벤트"></div>
+      <div class="up-ranking-event" id="up-ranking-event"></div>
+      <div class="up-ranking-list" id="up-ranking-list"></div>
+    </section>
   </div>
 
   <div class="modal-backdrop" id="login-modal" hidden>
@@ -201,34 +271,35 @@
       </div>
 
       <div class="admin-panel" id="admin-panel-up" role="tabpanel" aria-labelledby="admin-tab-up" data-admin-panel="up" hidden>
+        <p class="admin-help">활성 이벤트는 접속 시 UP 랭킹 모달로 자동 표시됩니다. 여러 이벤트가 있다면 먼저 보여줄 이벤트를 선택할 수 있습니다.</p>
         <form id="up-event-form" class="song-form">
           <input id="up-event-id" name="id" type="hidden">
           <label>
-            <span>이벤트 제목</span>
+            <span>탭 이름</span>
+            <input id="up-event-tab-name" name="tabName" type="text" placeholder="예: 8월 UP 이벤트" required>
+          </label>
+          <label>
+            <span>제목</span>
             <input id="up-event-title" name="title" type="text" required>
           </label>
-          <div class="form-grid">
-            <label>
-              <span>시작일</span>
-              <input id="up-event-start" name="startDate" type="date">
+          <label>
+            <span>SOOP 게시글 또는 댓글 URL</span>
+            <input id="up-event-soop-url" name="soopUrl" type="url" inputmode="url" placeholder="https://www.sooplive.com/station/.../post/..." required>
+          </label>
+          <div class="up-event-options">
+            <label class="check-row">
+              <input id="up-event-active" name="isActive" type="checkbox" checked>
+              <span>이벤트 활성화</span>
+            </label>
+            <label class="check-row">
+              <input id="up-event-startup" name="showOnStartup" type="checkbox">
+              <span>여러 이벤트 중 먼저 표시</span>
             </label>
             <label>
-              <span>종료일</span>
-              <input id="up-event-end" name="endDate" type="date">
+              <span>표시 순서</span>
+              <input id="up-event-order" name="sortOrder" type="number" min="0" step="1" value="0">
             </label>
           </div>
-          <label>
-            <span>상태</span>
-            <select id="up-event-status-select" name="status">
-              <option value="진행중">진행중</option>
-              <option value="예정">예정</option>
-              <option value="종료">종료</option>
-            </select>
-          </label>
-          <label>
-            <span>메모</span>
-            <textarea id="up-event-memo" name="memo" rows="2"></textarea>
-          </label>
           <div class="form-actions">
             <button class="draw-btn" type="submit">저장</button>
             <button class="secondary-btn" id="clear-up-event-form" type="button">새 이벤트</button>
@@ -258,6 +329,11 @@
           <span>아티스트</span>
           <input id="one-artist" name="artist" type="text">
         </label>
+        <label>
+          <span>커버 이미지 URL</span>
+          <input id="one-cover" name="coverUrl" type="url" inputmode="url" placeholder="https://...">
+          <span class="cover-form-preview" id="one-cover-preview" aria-hidden="true"></span>
+        </label>
         <div class="form-grid">
           <label>
             <span>Inst</span>
@@ -278,6 +354,11 @@
             <button type="button" class="skill-pick" data-level="4" aria-label="숙련도 4단계">🐟</button>
             <button type="button" class="skill-pick" data-level="5" aria-label="숙련도 5단계">🐟</button>
           </div>
+        </label>
+        <label>
+          <span>태그</span>
+          <input id="one-tags" name="tags" type="text" autocomplete="off" placeholder="예: 1절 가능, 고음곡, 발라드">
+          <small>여러 태그는 쉼표로 구분합니다.</small>
         </label>
         <label>
           <span>메모</span>
@@ -301,7 +382,8 @@
         </label>
         <label>
           <span>곡 목록</span>
-          <textarea id="many-rows" name="rows" rows="12" placeholder="분류	노래 제목	아티스트	Inst	정와클립	숙련도	메모"></textarea>
+          <textarea id="many-rows" name="rows" rows="12" placeholder="분류	노래 제목	아티스트	커버 이미지 URL	Inst	정와클립	숙련도	태그	메모"></textarea>
+          <small>태그가 여러 개라면 한 칸 안에서 슬래시(/)로 구분합니다.</small>
         </label>
         <p class="form-status" id="many-status" aria-live="polite"></p>
         <button class="draw-btn" type="submit">추가</button>
@@ -328,6 +410,11 @@
           <span>아티스트</span>
           <input id="edit-artist" name="artist" type="text">
         </label>
+        <label>
+          <span>커버 이미지 URL</span>
+          <input id="edit-cover" name="coverUrl" type="url" inputmode="url" placeholder="https://...">
+          <span class="cover-form-preview" id="edit-cover-preview" aria-hidden="true"></span>
+        </label>
         <div class="form-grid">
           <label>
             <span>Inst</span>
@@ -350,16 +437,23 @@
           </div>
         </label>
         <label>
+          <span>태그</span>
+          <input id="edit-tags" name="tags" type="text" autocomplete="off" placeholder="예: 1절 가능, 고음곡, 발라드">
+          <small>여러 태그는 쉼표로 구분합니다.</small>
+        </label>
+        <label>
           <span>메모</span>
           <textarea id="edit-memo" name="memo" rows="3"></textarea>
         </label>
         <p class="form-status" id="edit-status" aria-live="polite"></p>
         <button class="draw-btn" type="submit">저장</button>
         <button class="secondary-btn" id="reset-edit-song" type="button" hidden>원래대로</button>
+        <button class="danger-btn" id="delete-edit-song" type="button" hidden>곡 삭제</button>
       </form>
     </section>
   </div>
 
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
   <script src="script.js"></script>

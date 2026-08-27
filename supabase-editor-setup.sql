@@ -79,9 +79,11 @@ create table if not exists public.song_changes (
   category text not null check (category in ('K-POP', 'J-POP', 'POP/OST', '숙제곡')),
   title text not null,
   artist text not null default '',
+  cover_url text not null default '',
   inst_url text not null default '',
   jeongwa_clip_url text not null default '',
   skill_level smallint not null default 0 check (skill_level between 0 and 5),
+  tags text[] not null default '{}'::text[],
   memo text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -91,6 +93,12 @@ create table if not exists public.song_changes (
     or (record_type = 'custom' and source_song_id is null)
   )
 );
+
+alter table public.song_changes add column if not exists cover_url text not null default '';
+alter table public.song_changes add column if not exists tags text[] not null default '{}'::text[];
+
+create index if not exists song_changes_tags_idx
+on public.song_changes using gin (tags);
 
 create unique index if not exists song_changes_source_song_id_key
 on public.song_changes (source_song_id)
@@ -133,7 +141,12 @@ using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
 
 create table if not exists public.up_events (
   id text primary key,
+  tab_name text not null default 'UP 이벤트',
   title text not null,
+  soop_url text not null default '',
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  show_on_startup boolean not null default false,
   start_date date,
   end_date date,
   status text not null default '진행중' check (status in ('예정', '진행중', '종료')),
@@ -142,6 +155,15 @@ create table if not exists public.up_events (
   updated_at timestamptz not null default now(),
   updated_by uuid default auth.uid() references auth.users(id) on delete set null
 );
+
+alter table public.up_events add column if not exists tab_name text not null default 'UP 이벤트';
+alter table public.up_events add column if not exists soop_url text not null default '';
+alter table public.up_events add column if not exists sort_order integer not null default 0;
+alter table public.up_events add column if not exists is_active boolean not null default true;
+alter table public.up_events add column if not exists show_on_startup boolean not null default false;
+
+create index if not exists up_events_active_order_idx
+on public.up_events (is_active, sort_order);
 
 create table if not exists public.up_entries (
   id text primary key,
@@ -160,6 +182,7 @@ alter table public.up_entries enable row level security;
 
 revoke all on table public.up_events from anon;
 revoke all on table public.up_entries from anon;
+grant select on table public.up_events to anon;
 grant select, insert, update, delete on table public.up_events to authenticated;
 grant select, insert, update, delete on table public.up_entries to authenticated;
 
@@ -169,6 +192,13 @@ on public.up_events
 for select
 to authenticated
 using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+drop policy if exists "Everyone can read active UP events" on public.up_events;
+create policy "Everyone can read active UP events"
+on public.up_events
+for select
+to anon, authenticated
+using (is_active = true);
 
 drop policy if exists "Editors can add UP events" on public.up_events;
 create policy "Editors can add UP events"
@@ -220,3 +250,68 @@ on public.up_entries
 for delete
 to authenticated
 using (public.jeongwa_is_owner() or public.jeongwa_is_editor());
+
+create table if not exists public.song_reactions (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  song_id text not null,
+  liked boolean not null default false,
+  favorited boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, song_id),
+  constraint song_reactions_has_value check (liked or favorited)
+);
+
+create index if not exists song_reactions_liked_song_idx
+on public.song_reactions (song_id)
+where liked = true;
+
+alter table public.song_reactions enable row level security;
+
+revoke all on table public.song_reactions from anon;
+grant select, insert, update, delete on table public.song_reactions to authenticated;
+
+drop policy if exists "Users can read own song reactions" on public.song_reactions;
+create policy "Users can read own song reactions"
+on public.song_reactions
+for select
+to authenticated
+using (user_id = auth.uid());
+
+drop policy if exists "Users can add own song reactions" on public.song_reactions;
+create policy "Users can add own song reactions"
+on public.song_reactions
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+drop policy if exists "Users can update own song reactions" on public.song_reactions;
+create policy "Users can update own song reactions"
+on public.song_reactions
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+drop policy if exists "Users can remove own song reactions" on public.song_reactions;
+create policy "Users can remove own song reactions"
+on public.song_reactions
+for delete
+to authenticated
+using (user_id = auth.uid());
+
+create or replace function public.jeongwa_song_like_counts()
+returns table (song_id text, like_count bigint)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select reactions.song_id, count(*)::bigint as like_count
+  from public.song_reactions as reactions
+  where reactions.liked = true
+  group by reactions.song_id;
+$$;
+
+revoke all on function public.jeongwa_song_like_counts() from public;
+grant execute on function public.jeongwa_song_like_counts() to anon, authenticated;

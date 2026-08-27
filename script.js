@@ -2,11 +2,18 @@ const baseSongs = Array.isArray(window.JEONGWA_SONGS) ? window.JEONGWA_SONGS : [
 const storageKey = "jeongwa-songbook-added-songs";
 const editsStorageKey = "jeongwa-songbook-edited-songs";
 const upEventsStorageKey = "jeongwa-songbook-up-events";
+const viewModeStorageKey = "jeongwa-songbook-view-mode";
 const SUPABASE_URL = "https://ftdptxblxijbmgkbqnnh.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_3_tpgX3yEvfGrGvFdhRUzA_qQuemlEh";
 const OWNER_EMAIL = "riosniper12@gmail.com";
+const SOOP_PROXY_URL = "https://clever-rhino-36.hanul4269.deno.net";
+const SOOP_CHANNEL_ID = "jeongwazzang";
+const UP_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
+const ALL_CATEGORY = "전체";
 const categories = ["K-POP", "J-POP", "POP/OST", "숙제곡"];
 const categoryLabels = {
+  "전체": "전체",
   "K-POP": "K-POP",
   "J-POP": "J-POP",
   "POP/OST": "POP/OST",
@@ -14,8 +21,11 @@ const categoryLabels = {
 };
 
 const state = {
-  category: "K-POP",
+  category: ALL_CATEGORY,
   query: "",
+  viewMode: loadViewMode(),
+  favoritesOnly: false,
+  selectedTags: [],
 };
 
 let legacyCustomSongs = loadCustomSongs();
@@ -28,8 +38,21 @@ let authUser = null;
 let editorEmails = [];
 const ownerEmail = OWNER_EMAIL;
 let upEvents = [...legacyUpEvents];
+let activeUpEventId = null;
+let upRankingRefreshTimer = null;
+let upStartupHandled = false;
+const upRankingCache = new Map();
 let activeAdminTab = "editors";
 let legacyMigrationPromise = null;
+let songCoverColumnReady = null;
+let songTagsColumnReady = null;
+let coverFillCancelled = false;
+let coverFillRunning = false;
+let songReactionsReady = null;
+const likeCountsBySong = new Map();
+const myReactionsBySong = new Map();
+const pendingReactionSongs = new Set();
+let liveStatusRefreshTimer = null;
 
 const authDb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
@@ -73,6 +96,14 @@ function isValidEmail(value) {
 
 function uniqueEmails(values) {
   return [...new Set(values.map(normalizeEmail).filter(isValidEmail))];
+}
+
+function loadViewMode() {
+  try {
+    return localStorage.getItem(viewModeStorageKey) === "album" ? "album" : "list";
+  } catch {
+    return "list";
+  }
 }
 
 function isSignedIn() {
@@ -170,9 +201,25 @@ function normalizeSkill(value) {
   return Math.max(0, Math.min(5, number));
 }
 
-function normalizeCategory(value, fallback = state.category) {
+function normalizeCategory(value, fallback = "K-POP") {
   const text = clean(value);
   return categories.includes(text) ? text : fallback;
+}
+
+function normalizeTags(value) {
+  const values = Array.isArray(value)
+    ? value
+    : clean(value).split(/[,/\n]/);
+  const seen = new Set();
+  return values
+    .map((tag) => clean(tag).replace(/^#+/, ""))
+    .filter((tag) => {
+      const key = normalize(tag);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 20);
 }
 
 function normalizeSongRecord(song) {
@@ -181,40 +228,28 @@ function normalizeSongRecord(song) {
     category: normalizeCategory(song.category, "K-POP"),
     title: clean(song.title),
     artist: clean(song.artist),
+    coverUrl: normalizeUrl(song.coverUrl ?? song.cover_url),
     instUrl: normalizeUrl(song.instUrl),
     jeongwaClipUrl: normalizeUrl(song.jeongwaClipUrl),
     skillLevel: normalizeSkill(song.skillLevel),
+    tags: normalizeTags(song.tags),
     memo: clean(song.memo ?? song.note),
     custom: Boolean(song.custom),
     edited: Boolean(song.edited),
   };
 }
 
-function normalizeUpEntry(entry) {
-  const upCount = Number.parseInt(clean(entry.upCount), 10);
-  return {
-    id: entry.id ?? `entry-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    nickname: clean(entry.nickname),
-    songTitle: clean(entry.songTitle),
-    upCount: Number.isFinite(upCount) ? Math.max(0, upCount) : 0,
-    memo: clean(entry.memo),
-  };
-}
-
 function normalizeUpEvent(event) {
-  const status = ["예정", "진행중", "종료"].includes(clean(event.status)) ? clean(event.status) : "진행중";
-  const entries = Array.isArray(event.entries)
-    ? event.entries.map(normalizeUpEntry).filter((entry) => entry.nickname || entry.songTitle)
-    : [];
+  const sortOrder = Number.parseInt(event.sortOrder ?? event.sort_order, 10);
 
   return {
     id: event.id ?? `up-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    tabName: clean(event.tabName ?? event.tab_name) || "UP 이벤트",
     title: clean(event.title),
-    startDate: clean(event.startDate),
-    endDate: clean(event.endDate),
-    status,
-    memo: clean(event.memo),
-    entries,
+    soopUrl: normalizeUrl(event.soopUrl ?? event.soop_url),
+    sortOrder: Number.isFinite(sortOrder) ? Math.max(0, sortOrder) : 0,
+    isActive: event.isActive ?? event.is_active ?? true,
+    showOnStartup: event.showOnStartup ?? event.show_on_startup ?? false,
   };
 }
 
@@ -240,7 +275,7 @@ function songChangeId(songId) {
 function songToChangeRow(song, recordType) {
   const normalized = normalizeSongRecord(song);
   const isOverride = recordType === "override";
-  return {
+  const row = {
     id: isOverride ? songChangeId(normalized.id) : String(normalized.id),
     record_type: recordType,
     source_song_id: isOverride ? String(normalized.id) : null,
@@ -254,6 +289,10 @@ function songToChangeRow(song, recordType) {
     updated_at: new Date().toISOString(),
     updated_by: authUser?.id || null,
   };
+
+  if (songCoverColumnReady !== false) row.cover_url = normalized.coverUrl;
+  if (songTagsColumnReady !== false) row.tags = normalized.tags;
+  return row;
 }
 
 function songFromChangeRow(row) {
@@ -263,9 +302,11 @@ function songFromChangeRow(row) {
     category: row.category,
     title: row.title,
     artist: row.artist,
+    coverUrl: row.cover_url,
     instUrl: row.inst_url,
     jeongwaClipUrl: row.jeongwa_clip_url,
     skillLevel: row.skill_level,
+    tags: row.tags,
     memo: row.memo,
     custom,
     edited: !custom,
@@ -276,52 +317,61 @@ function upEventToRow(event) {
   const normalized = normalizeUpEvent(event);
   return {
     id: String(normalized.id),
+    tab_name: normalized.tabName,
     title: normalized.title,
-    start_date: normalized.startDate || null,
-    end_date: normalized.endDate || null,
-    status: normalized.status,
-    memo: normalized.memo,
+    soop_url: normalized.soopUrl,
+    sort_order: normalized.sortOrder,
+    is_active: Boolean(normalized.isActive),
+    show_on_startup: Boolean(normalized.showOnStartup),
     updated_at: new Date().toISOString(),
     updated_by: authUser?.id || null,
   };
 }
 
-function upEntryToRow(eventId, entry) {
-  const normalized = normalizeUpEntry(entry);
-  return {
-    id: String(normalized.id),
-    event_id: String(eventId),
-    nickname: normalized.nickname,
-    song_title: normalized.songTitle,
-    up_count: normalized.upCount,
-    memo: normalized.memo,
-    created_by: authUser?.id || null,
-  };
-}
-
-function upEventFromRows(row, entries) {
+function upEventFromRow(row) {
   return normalizeUpEvent({
     id: row.id,
+    tabName: row.tab_name,
     title: row.title,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    status: row.status,
-    memo: row.memo,
-    entries: entries.map((entry) => ({
-      id: entry.id,
-      nickname: entry.nickname,
-      songTitle: entry.song_title,
-      upCount: entry.up_count,
-      memo: entry.memo,
-    })),
+    soopUrl: row.soop_url,
+    sortOrder: row.sort_order,
+    isActive: row.is_active,
+    showOnStartup: row.show_on_startup,
   });
 }
 
 async function refreshSharedSongData() {
-  const { data, error } = await authDb
-    .from("song_changes")
-    .select("id, record_type, source_song_id, category, title, artist, inst_url, jeongwa_clip_url, skill_level, memo, created_at")
-    .order("created_at", { ascending: true });
+  const requiredColumns = ["id", "record_type", "source_song_id", "category", "title", "artist", "inst_url", "jeongwa_clip_url", "skill_level", "memo", "created_at"];
+  let data = null;
+  let error = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const columns = [...requiredColumns];
+    if (songCoverColumnReady !== false) columns.splice(6, 0, "cover_url");
+    if (songTagsColumnReady !== false) columns.splice(columns.length - 2, 0, "tags");
+
+    ({ data, error } = await authDb
+      .from("song_changes")
+      .select(columns.join(", "))
+      .order("created_at", { ascending: true }));
+
+    if (!error) {
+      if (columns.includes("cover_url")) songCoverColumnReady = true;
+      if (columns.includes("tags")) songTagsColumnReady = true;
+      break;
+    }
+
+    let retry = false;
+    if (/cover_url/i.test(error.message || "") && songCoverColumnReady !== false) {
+      songCoverColumnReady = false;
+      retry = true;
+    }
+    if (/\btags?\b/i.test(error.message || "") && songTagsColumnReady !== false) {
+      songTagsColumnReady = false;
+      retry = true;
+    }
+    if (!retry) break;
+  }
 
   if (error) {
     console.warn("공유 노래 데이터를 불러오지 못했습니다.", error.message);
@@ -357,46 +407,23 @@ async function refreshSharedSongData() {
 }
 
 async function refreshSharedUpEvents() {
-  if (!canEdit()) {
+  const { data, error } = await authDb
+    .from("up_events")
+    .select("id, tab_name, title, soop_url, sort_order, is_active, show_on_startup, updated_at")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.warn("공유 UP 이벤트를 불러오지 못했습니다.", error.message);
     upEvents = [];
-    return true;
-  }
-
-  const [eventsResult, entriesResult] = await Promise.all([
-    authDb
-      .from("up_events")
-      .select("id, title, start_date, end_date, status, memo, created_at")
-      .order("created_at", { ascending: false }),
-    authDb
-      .from("up_entries")
-      .select("id, event_id, nickname, song_title, up_count, memo, created_at")
-      .order("created_at", { ascending: false }),
-  ]);
-
-  if (eventsResult.error || entriesResult.error) {
-    console.warn(
-      "공유 UP 이벤트를 불러오지 못했습니다.",
-      eventsResult.error?.message || entriesResult.error?.message,
-    );
+    updateUpRankingButton();
     return false;
   }
 
-  const entriesByEvent = new Map();
-  (entriesResult.data || []).forEach((entry) => {
-    const entries = entriesByEvent.get(entry.event_id) || [];
-    entries.push(entry);
-    entriesByEvent.set(entry.event_id, entries);
-  });
-
-  const remoteEvents = (eventsResult.data || []).map((event) => (
-    upEventFromRows(event, entriesByEvent.get(event.id) || [])
-  ));
-  const remoteIds = new Set(remoteEvents.map((event) => String(event.id)));
-  upEvents = [
-    ...remoteEvents,
-    ...legacyUpEvents.filter((event) => !remoteIds.has(String(event.id))),
-  ];
+  upEvents = (data || []).map(upEventFromRow);
+  updateUpRankingButton();
   renderUpEvents();
+  maybeOpenStartupUpRanking();
   return true;
 }
 
@@ -409,29 +436,10 @@ async function migrateLegacyData() {
       ...legacyCustomSongs.map((song) => songToChangeRow(song, "custom")),
       ...Object.values(legacyEditedSongsById).map((song) => songToChangeRow(song, "override")),
     ];
-    const eventRows = legacyUpEvents.map(upEventToRow);
-    const entryRows = legacyUpEvents.flatMap((event) => (
-      event.entries.map((entry) => upEntryToRow(event.id, entry))
-    ));
-
     if (songRows.length) {
       const { error } = await authDb
         .from("song_changes")
         .upsert(songRows, { onConflict: "id", ignoreDuplicates: true });
-      if (error) throw error;
-    }
-
-    if (eventRows.length) {
-      const { error } = await authDb
-        .from("up_events")
-        .upsert(eventRows, { onConflict: "id", ignoreDuplicates: true });
-      if (error) throw error;
-    }
-
-    if (entryRows.length) {
-      const { error } = await authDb
-        .from("up_entries")
-        .upsert(entryRows, { onConflict: "id", ignoreDuplicates: true });
       if (error) throw error;
     }
 
@@ -462,6 +470,64 @@ function memoText(song) {
   return String(song.memo ?? song.note ?? "").trim();
 }
 
+function coverMarkup(song, variant = "thumb") {
+  const url = clean(song.coverUrl);
+  const label = `${song.title || "노래"} 앨범 커버`;
+  return `
+    <span class="song-cover song-cover-${escapeHtml(variant)}${url ? " has-image" : ""}">
+      <span class="song-cover-placeholder" aria-hidden="true">♪</span>
+      ${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(label)}" loading="lazy" data-cover-image>` : ""}
+    </span>
+  `;
+}
+
+function bindCoverImageErrors(root = document) {
+  root.querySelectorAll("img[data-cover-image]").forEach((image) => {
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      image.closest(".song-cover")?.classList.remove("has-image");
+    }, { once: true });
+  });
+}
+
+function reactionState(songId) {
+  return myReactionsBySong.get(String(songId)) || { liked: false, favorited: false };
+}
+
+function reactionMarkup(song) {
+  const songId = String(song.id);
+  const reaction = reactionState(songId);
+  const likeCount = likeCountsBySong.get(songId) || 0;
+  const pending = pendingReactionSongs.has(songId);
+  return `
+    <div class="song-reactions" aria-label="${escapeHtml(song.title)} 반응">
+      <button class="song-reaction-btn like${reaction.liked ? " active" : ""}" type="button" data-song-reaction="like" data-reaction-song-id="${escapeHtml(songId)}" aria-label="좋아요${reaction.liked ? " 취소" : ""}" title="좋아요" aria-pressed="${reaction.liked}"${pending ? " disabled" : ""}>
+        <i data-lucide="heart" aria-hidden="true"></i>
+        <span>${Number(likeCount).toLocaleString("ko-KR")}</span>
+      </button>
+      <button class="song-reaction-btn favorite${reaction.favorited ? " active" : ""}" type="button" data-song-reaction="favorite" data-reaction-song-id="${escapeHtml(songId)}" aria-label="즐겨찾기${reaction.favorited ? " 해제" : ""}" title="즐겨찾기" aria-pressed="${reaction.favorited}"${pending ? " disabled" : ""}>
+        <i data-lucide="star" aria-hidden="true"></i>
+      </button>
+    </div>
+  `;
+}
+
+function showNotice(message) {
+  let notice = $("#site-toast");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "site-toast";
+    notice.className = "site-toast";
+    notice.setAttribute("role", "status");
+    document.body.append(notice);
+  }
+
+  notice.textContent = message;
+  notice.classList.add("visible");
+  window.clearTimeout(showNotice.timer);
+  showNotice.timer = window.setTimeout(() => notice.classList.remove("visible"), 2600);
+}
+
 function linkButton(url, label) {
   const href = String(url ?? "").trim();
   if (!href) return '<span class="muted">-</span>';
@@ -487,8 +553,55 @@ function skillFish(song) {
   `;
 }
 
+function tagsMarkup(song) {
+  const tags = normalizeTags(song.tags);
+  if (!tags.length) return "";
+  return `<div class="song-tags" aria-label="태그">${tags.map((tag) => `<span class="song-tag">#${escapeHtml(tag)}</span>`).join("")}</div>`;
+}
+
 function categoryCount(category) {
+  if (category === ALL_CATEGORY) return songs.length;
   return songs.filter((song) => song.category === category).length;
+}
+
+function availableTagCounts() {
+  const counts = new Map();
+  songs
+    .filter((song) => state.category === ALL_CATEGORY || song.category === state.category)
+    .forEach((song) => normalizeTags(song.tags).forEach((tag) => {
+      const key = normalize(tag);
+      const current = counts.get(key) || { label: tag, count: 0 };
+      current.count += 1;
+      counts.set(key, current);
+    }));
+  return [...counts.entries()]
+    .map(([key, value]) => ({ key, ...value }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
+}
+
+function syncSelectedTags(availableTags = availableTagCounts()) {
+  const available = new Set(availableTags.map((tag) => tag.key));
+  state.selectedTags = state.selectedTags.filter((tag) => available.has(normalize(tag)));
+}
+
+function renderTagFilter(availableTags = availableTagCounts()) {
+  const wrap = $("#tag-filter");
+  const list = $("#tag-filter-list");
+  wrap.hidden = availableTags.length === 0;
+  if (!availableTags.length) {
+    list.innerHTML = "";
+    return;
+  }
+
+  const selected = new Set(state.selectedTags.map(normalize));
+  list.innerHTML = `
+    <button class="tag-filter-chip${selected.size ? "" : " active"}" type="button" data-filter-tag="" aria-pressed="${!selected.size}">전체</button>
+    ${availableTags.map((tag) => `
+      <button class="tag-filter-chip${selected.has(tag.key) ? " active" : ""}" type="button" data-filter-tag="${escapeHtml(tag.label)}" aria-pressed="${selected.has(tag.key)}">
+        #${escapeHtml(tag.label)} <span>${tag.count.toLocaleString("ko-KR")}</span>
+      </button>
+    `).join("")}
+  `;
 }
 
 function matchesQuery(song, query) {
@@ -500,18 +613,24 @@ function matchesQuery(song, query) {
     song.instUrl,
     song.jeongwaClipUrl,
     song.category,
+    normalizeTags(song.tags).join(" "),
   ].join(" "));
   return haystack.includes(query);
 }
 
 function filteredSongs() {
   const query = normalize(state.query);
-  return songs.filter((song) => song.category === state.category && matchesQuery(song, query));
+  return songs.filter((song) => (
+    (state.category === ALL_CATEGORY || song.category === state.category)
+    && matchesQuery(song, query)
+    && state.selectedTags.every((selectedTag) => normalizeTags(song.tags).some((tag) => normalize(tag) === normalize(selectedTag)))
+    && (!state.favoritesOnly || reactionState(song.id).favorited)
+  ));
 }
 
 function renderTabs() {
   const tabs = $("#category-tabs");
-  tabs.innerHTML = categories.map((category) => {
+  tabs.innerHTML = [ALL_CATEGORY, ...categories].map((category) => {
     const active = category === state.category ? " active" : "";
     return `
       <button class="tab${active}" type="button" data-category="${escapeHtml(category)}">
@@ -524,6 +643,7 @@ function renderTabs() {
   tabs.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       state.category = button.dataset.category;
+      syncSelectedTags();
       render();
       updateRandomCount();
     });
@@ -535,7 +655,7 @@ function populateCategorySelects() {
     select.innerHTML = categories.map((category) => (
       `<option value="${escapeHtml(category)}">${escapeHtml(categoryLabels[category])}</option>`
     )).join("");
-    select.value = state.category;
+    select.value = categories.includes(state.category) ? state.category : categories[0];
   });
 }
 
@@ -545,7 +665,14 @@ function renderTable(items) {
   body.innerHTML = items.map((song) => `
     <tr class="song-row${editable ? " editable-row" : ""}" data-song-id="${escapeHtml(song.id)}"${editable ? ` tabindex="0" aria-label="${escapeHtml(song.title)} 수정"` : ""}>
       <td>${categoryBadge(song.category)}</td>
-      <td>${escapeHtml(song.title)}</td>
+      <td>${coverMarkup(song)}</td>
+      <td>
+        <div class="song-title-cell">
+          <span>${escapeHtml(song.title)}</span>
+          ${tagsMarkup(song)}
+          ${reactionMarkup(song)}
+        </div>
+      </td>
       <td>${escapeHtml(song.artist || "")}</td>
       <td>${linkButton(song.instUrl, "Inst")}</td>
       <td>${linkButton(song.jeongwaClipUrl, "클립")}</td>
@@ -560,11 +687,18 @@ function renderCards(items) {
   const editable = canEdit();
   list.innerHTML = items.map((song) => `
     <article class="song-card${editable ? " editable-card" : ""}" data-song-id="${escapeHtml(song.id)}"${editable ? ` tabindex="0" aria-label="${escapeHtml(song.title)} 수정"` : ""}>
-      <div class="song-card-top">
-        ${categoryBadge(song.category)}
+      <div class="song-card-layout">
+        ${coverMarkup(song, "mobile")}
+        <div class="song-card-body">
+          <div class="song-card-top">
+            ${categoryBadge(song.category)}
+            ${reactionMarkup(song)}
+          </div>
+          <div class="song-card-title">${escapeHtml(song.title)}</div>
+          <div class="song-card-artist">${escapeHtml(song.artist || "")}</div>
+          ${tagsMarkup(song)}
+        </div>
       </div>
-      <div class="song-card-title">${escapeHtml(song.title)}</div>
-      <div class="song-card-artist">${escapeHtml(song.artist || "")}</div>
       <div class="song-card-meta">
         <span>Inst ${linkButton(song.instUrl, "열기")}</span>
         <span>정와클립 ${linkButton(song.jeongwaClipUrl, "열기")}</span>
@@ -575,25 +709,70 @@ function renderCards(items) {
   `).join("");
 }
 
+function renderAlbumGrid(items) {
+  const grid = $("#album-grid");
+  const editable = canEdit();
+  grid.innerHTML = items.map((song) => `
+    <article class="album-card${editable ? " editable-card" : ""}" data-song-id="${escapeHtml(song.id)}"${editable ? ` tabindex="0" aria-label="${escapeHtml(song.title)} 수정"` : ""}>
+      ${coverMarkup(song, "album")}
+      <div class="album-card-copy">
+        <div class="album-card-badges">
+          ${categoryBadge(song.category)}
+          ${skillValue(song) ? skillFish(song) : ""}
+        </div>
+        <h3>${escapeHtml(song.title)}</h3>
+        <p>${escapeHtml(song.artist || "아티스트 미등록")}</p>
+        ${tagsMarkup(song)}
+        ${reactionMarkup(song)}
+        <div class="album-card-links">
+          ${song.instUrl ? linkButton(song.instUrl, "Inst") : ""}
+          ${song.jeongwaClipUrl ? linkButton(song.jeongwaClipUrl, "클립") : ""}
+        </div>
+        ${memoText(song) ? `<div class="album-card-memo">${escapeHtml(memoText(song))}</div>` : ""}
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderViewToggle() {
+  document.querySelectorAll("[data-view-mode]").forEach((button) => {
+    const active = button.dataset.viewMode === state.viewMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  $("#favorite-filter").classList.toggle("active", state.favoritesOnly);
+  $("#favorite-filter").setAttribute("aria-pressed", String(state.favoritesOnly));
+}
+
 function renderSummary(items) {
   const label = categoryLabels[state.category];
   const total = categoryCount(state.category);
-  const hasQuery = normalize(state.query).length > 0;
-  $("#result-summary").textContent = hasQuery
-    ? `${label} 검색 결과 ${items.length.toLocaleString("ko-KR")}곡 / 전체 ${total.toLocaleString("ko-KR")}곡`
+  const isFiltered = normalize(state.query).length > 0 || state.favoritesOnly || state.selectedTags.length > 0;
+  const resultLabel = state.favoritesOnly ? "즐겨찾기" : state.selectedTags.length ? "필터 결과" : "검색 결과";
+  $("#result-summary").textContent = isFiltered
+    ? `${label} ${resultLabel} ${items.length.toLocaleString("ko-KR")}곡 / 전체 ${total.toLocaleString("ko-KR")}곡`
     : `${label} ${total.toLocaleString("ko-KR")}곡`;
 }
 
 function render() {
+  const availableTags = availableTagCounts();
+  syncSelectedTags(availableTags);
   renderTabs();
+  renderTagFilter(availableTags);
   const items = filteredSongs();
   renderSummary(items);
   renderTable(items);
   renderCards(items);
+  renderAlbumGrid(items);
+  renderViewToggle();
   $("#empty-state").hidden = items.length !== 0;
-  $("#table-wrap").hidden = items.length === 0;
-  $("#song-card-list").hidden = items.length === 0;
+  const albumMode = state.viewMode === "album";
+  $("#table-wrap").hidden = items.length === 0 || albumMode;
+  $("#song-card-list").hidden = items.length === 0 || albumMode;
+  $("#album-grid").hidden = items.length === 0 || !albumMode;
   $("#clear-search").classList.toggle("visible", state.query.trim().length > 0);
+  bindCoverImageErrors($(".songbook"));
+  window.lucide?.createIcons();
 }
 
 function openModal(id) {
@@ -603,6 +782,47 @@ function openModal(id) {
 
 function closeModal(id) {
   $(id).hidden = true;
+}
+
+function renderLiveStatus(isLive, title = "", unavailable = false) {
+  const badge = $("#live-badge");
+  if (!badge) return;
+
+  badge.classList.toggle("is-live", isLive);
+  const label = isLive
+    ? `정와 SOOP 방송 중${title ? `, ${title}` : ""}`
+    : unavailable
+      ? "정와 SOOP 방송국, 방송 상태를 확인하지 못함"
+      : "정와 SOOP 방송국, 현재 오프라인";
+  badge.setAttribute("aria-label", label);
+  badge.title = isLive ? (title || "정와 방송 보러 가기") : unavailable ? "방송 상태 확인 실패" : "현재 오프라인";
+}
+
+async function refreshLiveStatus() {
+  const target = `https://chapi.sooplive.co.kr/api/${encodeURIComponent(SOOP_CHANNEL_ID)}/station`;
+  try {
+    const response = await fetch(`${SOOP_PROXY_URL}?url=${encodeURIComponent(target)}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!response.ok) throw new Error(`SOOP 응답 오류 (${response.status})`);
+
+    const payload = await response.json();
+    const broadcast = payload?.broad;
+    renderLiveStatus(Boolean(broadcast?.broad_no), clean(broadcast?.broad_title || broadcast?.title));
+  } catch (error) {
+    console.warn("SOOP LIVE 상태를 확인하지 못했습니다.", error.message);
+    renderLiveStatus(false, "", true);
+  }
+}
+
+function initLiveStatus() {
+  refreshLiveStatus();
+  window.clearInterval(liveStatusRefreshTimer);
+  liveStatusRefreshTimer = window.setInterval(refreshLiveStatus, LIVE_REFRESH_INTERVAL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshLiveStatus();
+  });
 }
 
 function setAuthMenu(open) {
@@ -671,6 +891,8 @@ async function logout() {
   authUser = null;
   editorEmails = [];
   upEvents = [];
+  myReactionsBySong.clear();
+  state.favoritesOnly = false;
   setAuthMenu(false);
   setFabMenu(false);
   closeAddOneModal();
@@ -701,6 +923,100 @@ async function refreshEditorEmails() {
   editorEmails = uniqueEmails((data || []).map((row) => row.email));
 }
 
+async function refreshSongReactions() {
+  likeCountsBySong.clear();
+  myReactionsBySong.clear();
+
+  const { data: counts, error: countsError } = await authDb.rpc("jeongwa_song_like_counts");
+  if (countsError) {
+    songReactionsReady = false;
+    return false;
+  }
+
+  songReactionsReady = true;
+  (counts || []).forEach((row) => {
+    likeCountsBySong.set(String(row.song_id), Number(row.like_count) || 0);
+  });
+
+  if (!isSignedIn()) return true;
+
+  const { data: mine, error: mineError } = await authDb
+    .from("song_reactions")
+    .select("song_id, liked, favorited")
+    .eq("user_id", authUser.id);
+
+  if (mineError) {
+    songReactionsReady = false;
+    return false;
+  }
+
+  (mine || []).forEach((row) => {
+    myReactionsBySong.set(String(row.song_id), {
+      liked: Boolean(row.liked),
+      favorited: Boolean(row.favorited),
+    });
+  });
+  return true;
+}
+
+async function toggleSongReaction(songId, type) {
+  if (!isSignedIn()) {
+    openLoginModal();
+    $("#login-status").textContent = "좋아요와 즐겨찾기는 로그인 후 사용할 수 있습니다.";
+    return;
+  }
+
+  if (songReactionsReady !== true) {
+    showNotice("먼저 Supabase 반응 기능 SQL을 실행해주세요.");
+    return;
+  }
+
+  const id = String(songId);
+  if (pendingReactionSongs.has(id)) return;
+  const before = { ...reactionState(id) };
+  const after = {
+    liked: type === "like" ? !before.liked : before.liked,
+    favorited: type === "favorite" ? !before.favorited : before.favorited,
+  };
+  const beforeCount = likeCountsBySong.get(id) || 0;
+
+  pendingReactionSongs.add(id);
+  myReactionsBySong.set(id, after);
+  if (type === "like") {
+    likeCountsBySong.set(id, Math.max(0, beforeCount + (after.liked ? 1 : -1)));
+  }
+  render();
+
+  let error = null;
+  if (!after.liked && !after.favorited) {
+    ({ error } = await authDb
+      .from("song_reactions")
+      .delete()
+      .eq("user_id", authUser.id)
+      .eq("song_id", id));
+  } else {
+    ({ error } = await authDb
+      .from("song_reactions")
+      .upsert({
+        user_id: authUser.id,
+        song_id: id,
+        liked: after.liked,
+        favorited: after.favorited,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,song_id" }));
+  }
+
+  pendingReactionSongs.delete(id);
+  if (error) {
+    myReactionsBySong.set(id, before);
+    likeCountsBySong.set(id, beforeCount);
+    showNotice(`저장하지 못했습니다: ${error.message}`);
+  } else if (!after.liked && !after.favorited) {
+    myReactionsBySong.delete(id);
+  }
+  render();
+}
+
 async function applyAuthSession(session) {
   authUser = session?.user
     ? {
@@ -714,10 +1030,9 @@ async function applyAuthSession(session) {
   await refreshEditorEmails();
   if (canEdit()) {
     await migrateLegacyData();
-    await Promise.all([refreshSharedSongData(), refreshSharedUpEvents()]);
+    await Promise.all([refreshSharedSongData(), refreshSharedUpEvents(), refreshSongReactions()]);
   } else {
-    await refreshSharedSongData();
-    upEvents = [];
+    await Promise.all([refreshSharedSongData(), refreshSharedUpEvents(), refreshSongReactions()]);
   }
   updateAuthUi();
   render();
@@ -902,35 +1217,47 @@ async function removeEditorEmail(email) {
   render();
 }
 
-function dateRangeText(event) {
-  const start = clean(event.startDate);
-  const end = clean(event.endDate);
-  if (start && end) return `${start} - ${end}`;
-  if (start) return `${start} 시작`;
-  if (end) return `${end} 종료`;
-  return "기간 미정";
+function activeUpEvents() {
+  return upEvents.filter((event) => event.isActive && parseSoopPostUrl(event.soopUrl));
 }
 
-function renderUpEntryList(event) {
-  if (!event.entries.length) {
-    return '<p class="admin-empty">등록된 참여자가 없습니다.</p>';
+function updateUpRankingButton() {
+  const button = $("#open-up-ranking");
+  const activeEvents = activeUpEvents();
+  button.hidden = activeEvents.length === 0;
+  if (!activeEvents.some((event) => event.id === activeUpEventId)) {
+    activeUpEventId = activeEvents[0]?.id || null;
   }
+}
 
-  return `
-    <ul class="up-entry-list">
-      ${event.entries.map((entry) => `
-        <li class="up-entry-item">
-          <div class="up-entry-main">
-            <strong>${escapeHtml(entry.nickname || "-")}</strong>
-            ${entry.songTitle ? ` · ${escapeHtml(entry.songTitle)}` : ""}
-            ${entry.memo ? ` · ${escapeHtml(entry.memo)}` : ""}
-          </div>
-          <span class="up-count">${Number(entry.upCount || 0).toLocaleString("ko-KR")} UP</span>
-          <button class="admin-mini-btn" type="button" data-delete-up-entry="${escapeHtml(entry.id)}" data-event-id="${escapeHtml(event.id)}">삭제</button>
-        </li>
-      `).join("")}
-    </ul>
-  `;
+function parseSoopPostUrl(value) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.toLowerCase();
+    const allowed = host === "sooplive.com"
+      || host.endsWith(".sooplive.com")
+      || host === "sooplive.co.kr"
+      || host.endsWith(".sooplive.co.kr")
+      || host === "afreecatv.com"
+      || host.endsWith(".afreecatv.com");
+    if (!allowed) return null;
+
+    const match = url.pathname.match(/\/(?:station\/)?([\w-]+)\/post\/(\d+)/i);
+    if (!match) return null;
+    const highlightMatch = url.hash.match(/^#comment_noti(\d+)$/i);
+    return {
+      bjId: match[1],
+      postNo: match[2],
+      highlightReplyNo: highlightMatch?.[1] || "",
+      baseUrl: `${url.origin}${url.pathname}`,
+      originalUrl: normalized,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function renderUpEvents() {
@@ -944,20 +1271,13 @@ function renderUpEvents() {
     <article class="up-event-card">
       <div class="up-event-head">
         <div>
+          <div class="up-event-tab-name">${escapeHtml(event.tabName)}</div>
           <h3 class="up-event-title">${escapeHtml(event.title)}</h3>
-          <div class="up-event-meta">${escapeHtml(dateRangeText(event))}</div>
+          <a class="up-event-url" href="${escapeHtml(event.soopUrl)}" target="_blank" rel="noopener noreferrer">SOOP 게시글 보기</a>
         </div>
-        <span class="up-status">${escapeHtml(event.status)}</span>
+        <span class="up-status">${event.isActive ? "활성" : "비활성"}</span>
       </div>
-      ${event.memo ? `<div class="up-event-memo">${escapeHtml(event.memo)}</div>` : ""}
-      ${renderUpEntryList(event)}
-      <form class="up-entry-form" data-event-id="${escapeHtml(event.id)}">
-        <input name="nickname" type="text" placeholder="닉네임" autocomplete="off">
-        <input name="songTitle" type="text" placeholder="곡명" autocomplete="off">
-        <input name="upCount" type="number" min="0" step="1" placeholder="UP">
-        <input name="memo" type="text" placeholder="메모" autocomplete="off">
-        <button type="submit">등록</button>
-      </form>
+      <div class="up-event-meta">표시 순서 ${event.sortOrder}${event.showOnStartup ? " · 접속 시 먼저 표시" : ""}</div>
       <div class="up-event-actions">
         <button class="admin-mini-btn" type="button" data-edit-up-event="${escapeHtml(event.id)}">수정</button>
         <button class="admin-mini-btn" type="button" data-delete-up-event="${escapeHtml(event.id)}">삭제</button>
@@ -970,19 +1290,21 @@ function upEventFromForm(form) {
   const data = new FormData(form);
   return normalizeUpEvent({
     id: data.get("id") || undefined,
+    tabName: data.get("tabName"),
     title: data.get("title"),
-    startDate: data.get("startDate"),
-    endDate: data.get("endDate"),
-    status: data.get("status"),
-    memo: data.get("memo"),
-    entries: upEvents.find((event) => event.id === data.get("id"))?.entries || [],
+    soopUrl: data.get("soopUrl"),
+    sortOrder: data.get("sortOrder"),
+    isActive: data.get("isActive") === "on",
+    showOnStartup: data.get("showOnStartup") === "on",
   });
 }
 
 function clearUpEventForm() {
   $("#up-event-form").reset();
   $("#up-event-id").value = "";
-  $("#up-event-status-select").value = "진행중";
+  $("#up-event-active").checked = true;
+  $("#up-event-startup").checked = false;
+  $("#up-event-order").value = String(upEvents.length);
   $("#up-event-status").textContent = "";
 }
 
@@ -991,17 +1313,22 @@ function editUpEvent(eventId) {
   if (!event) return;
 
   $("#up-event-id").value = event.id;
+  $("#up-event-tab-name").value = event.tabName;
   $("#up-event-title").value = event.title;
-  $("#up-event-start").value = event.startDate;
-  $("#up-event-end").value = event.endDate;
-  $("#up-event-status-select").value = event.status;
-  $("#up-event-memo").value = event.memo;
+  $("#up-event-soop-url").value = event.soopUrl;
+  $("#up-event-order").value = String(event.sortOrder);
+  $("#up-event-active").checked = event.isActive;
+  $("#up-event-startup").checked = event.showOnStartup;
   $("#up-event-title").focus();
 }
 
 async function saveUpEvent(form) {
   const event = upEventFromForm(form);
-  if (!event.title) return false;
+  if (!event.tabName || !event.title) return false;
+  if (!parseSoopPostUrl(event.soopUrl)) {
+    $("#up-event-status").textContent = "올바른 SOOP 게시글 또는 댓글 URL을 입력해주세요.";
+    return false;
+  }
 
   const { error } = await authDb
     .from("up_events")
@@ -1015,9 +1342,11 @@ async function saveUpEvent(form) {
   const exists = upEvents.some((item) => item.id === event.id);
   upEvents = exists
     ? upEvents.map((item) => (item.id === event.id ? event : item))
-    : [event, ...upEvents];
+    : [...upEvents, event];
+  upEvents.sort((a, b) => a.sortOrder - b.sortOrder);
   clearUpEventForm();
   renderUpEvents();
+  updateUpRankingButton();
   return true;
 }
 
@@ -1034,55 +1363,166 @@ async function deleteUpEvent(eventId) {
 
   upEvents = upEvents.filter((event) => event.id !== eventId);
   renderUpEvents();
+  updateUpRankingButton();
   return true;
 }
 
-async function addUpEntry(form) {
-  const eventId = form.dataset.eventId;
-  const data = new FormData(form);
-  const entry = normalizeUpEntry({
-    nickname: data.get("nickname"),
-    songTitle: data.get("songTitle"),
-    upCount: data.get("upCount"),
-    memo: data.get("memo"),
-  });
-
-  if (!entry.nickname && !entry.songTitle) return false;
-
-  const { error } = await authDb
-    .from("up_entries")
-    .insert(upEntryToRow(eventId, entry));
-
-  if (error) {
-    $("#up-event-status").textContent = `참여자를 등록하지 못했습니다: ${error.message}`;
-    return false;
-  }
-
-  upEvents = upEvents.map((event) => (
-    event.id === eventId ? { ...event, entries: [entry, ...event.entries] } : event
-  ));
-  renderUpEvents();
-  return true;
+function upRankingEvent() {
+  return activeUpEvents().find((event) => event.id === activeUpEventId) || activeUpEvents()[0] || null;
 }
 
-async function deleteUpEntry(eventId, entryId) {
-  const { error } = await authDb
-    .from("up_entries")
-    .delete()
-    .eq("id", String(entryId));
+function renderUpRankingTabs() {
+  const events = activeUpEvents();
+  $("#up-ranking-tabs").innerHTML = events.map((event) => `
+    <button class="up-ranking-tab${event.id === activeUpEventId ? " active" : ""}" type="button" role="tab" aria-selected="${event.id === activeUpEventId}" data-up-ranking-event="${escapeHtml(event.id)}">
+      ${escapeHtml(event.tabName)}
+    </button>
+  `).join("");
+}
 
-  if (error) {
-    $("#up-event-status").textContent = `참여자를 삭제하지 못했습니다: ${error.message}`;
-    return false;
+function renderUpRankingEvent(event) {
+  if (!event) {
+    $("#up-ranking-event").innerHTML = "";
+    $("#up-ranking-list").innerHTML = '<p class="admin-empty">진행 중인 UP 이벤트가 없습니다.</p>';
+    return;
   }
 
-  upEvents = upEvents.map((event) => (
-    event.id === eventId
-      ? { ...event, entries: event.entries.filter((entry) => entry.id !== entryId) }
-      : event
-  ));
-  renderUpEvents();
-  return true;
+  const parsed = parseSoopPostUrl(event.soopUrl);
+  const originalLink = parsed?.highlightReplyNo
+    ? `<a class="secondary-btn compact-link" href="${escapeHtml(parsed.baseUrl)}" target="_blank" rel="noopener noreferrer">원문 보기</a>`
+    : "";
+  $("#up-ranking-event").innerHTML = `
+    <div>
+      <h3>${escapeHtml(event.title)}</h3>
+      <p>댓글의 좋아요 수를 기준으로 자동 집계됩니다.</p>
+    </div>
+    <div class="up-ranking-actions">
+      <a class="draw-btn compact-link" href="${escapeHtml(event.soopUrl)}" target="_blank" rel="noopener noreferrer">UP하러 가기</a>
+      ${originalLink}
+    </div>
+  `;
+}
+
+function rankingCommentUrl(event, replyNo) {
+  const parsed = parseSoopPostUrl(event.soopUrl);
+  if (!parsed) return event.soopUrl;
+  return replyNo ? `${parsed.baseUrl}#comment_noti${replyNo}` : parsed.baseUrl;
+}
+
+function renderUpRankingList(event, ranking, updatedAt) {
+  const parsed = parseSoopPostUrl(event?.soopUrl);
+  if (!event || !ranking?.length) {
+    $("#up-ranking-list").innerHTML = '<p class="admin-empty">등록된 댓글이 없거나 순위를 불러오지 못했습니다.</p>';
+    $("#up-ranking-updated").textContent = "랭킹 데이터가 없습니다.";
+    return;
+  }
+
+  const highlightedReply = parsed?.highlightReplyNo || "";
+  const ordered = ranking.map((entry) => ({
+    ...entry,
+    highlighted: highlightedReply && String(entry.replyNo) === highlightedReply,
+  }));
+  const highlighted = ordered.find((entry) => entry.highlighted);
+  const displayRows = highlighted
+    ? [highlighted, ...ordered.filter((entry) => !entry.highlighted)]
+    : ordered;
+
+  $("#up-ranking-list").innerHTML = displayRows.map((entry) => `
+    <a class="up-rank-item${entry.highlighted ? " highlighted" : ""}" href="${escapeHtml(rankingCommentUrl(event, entry.replyNo))}" target="_blank" rel="noopener noreferrer">
+      <span class="up-rank-number">${entry.rank}</span>
+      ${entry.profileUrl
+        ? `<img class="up-rank-profile" src="${escapeHtml(entry.profileUrl)}" alt="" loading="lazy">`
+        : '<span class="up-rank-profile-fallback" aria-hidden="true">UP</span>'}
+      <span class="up-rank-person">
+        <strong>${escapeHtml(entry.name || entry.userId || "-")}${entry.highlighted ? '<span class="up-highlight-badge">하이라이트</span>' : ""}</strong>
+        <small>@${escapeHtml(entry.userId || "-")} · ${escapeHtml(entry.timestamp || "")}</small>
+      </span>
+      <span class="up-rank-likes">${entry.likeCount.toLocaleString("ko-KR")} UP</span>
+    </a>
+  `).join("");
+  $("#up-ranking-updated").textContent = `마지막 업데이트 ${new Date(updatedAt).toLocaleString("ko-KR")}`;
+}
+
+async function fetchSoopRanking(event, force = false) {
+  const parsed = parseSoopPostUrl(event.soopUrl);
+  if (!parsed) throw new Error("SOOP 게시글 URL을 확인해주세요.");
+
+  const cached = upRankingCache.get(event.id);
+  if (!force && cached && Date.now() - cached.savedAt < 2 * 60 * 1000) return cached;
+
+  const items = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const target = `https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(parsed.bjId)}/post/${encodeURIComponent(parsed.postNo)}/comment?page=${page}&orderBy=reg_date&cCommentNo=0&perPage=100`;
+    const response = await fetch(`${SOOP_PROXY_URL}?url=${encodeURIComponent(target)}`, {
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) throw new Error(`SOOP 응답 오류 (${response.status})`);
+
+    const payload = await response.json();
+    (payload.data || []).forEach((comment) => {
+      if (!comment.pCommentNo) return;
+      items.push({
+        userId: clean(comment.userId),
+        name: clean(comment.userNick),
+        profileUrl: normalizeUrl(comment.profileImage),
+        timestamp: clean(comment.regDate),
+        likeCount: Math.max(0, Number.parseInt(comment.likeCnt, 10) || 0),
+        replyNo: clean(comment.pCommentNo),
+      });
+    });
+    lastPage = Math.min(100, Number.parseInt(payload.meta?.lastPage, 10) || 1);
+    page += 1;
+  } while (page <= lastPage);
+
+  items.sort((a, b) => b.likeCount - a.likeCount || a.timestamp.localeCompare(b.timestamp));
+  items.forEach((item, index) => { item.rank = index + 1; });
+  const result = { ranking: items, updatedAt: new Date().toISOString(), savedAt: Date.now() };
+  upRankingCache.set(event.id, result);
+  return result;
+}
+
+async function refreshUpRanking(force = false) {
+  const event = upRankingEvent();
+  renderUpRankingTabs();
+  renderUpRankingEvent(event);
+  if (!event) return;
+
+  $("#up-ranking-list").innerHTML = '<p class="admin-empty">좋아요 순위를 불러오는 중입니다.</p>';
+  $("#up-ranking-updated").textContent = "SOOP 게시글을 확인하고 있습니다.";
+  try {
+    const result = await fetchSoopRanking(event, force);
+    renderUpRankingList(event, result.ranking, result.updatedAt);
+  } catch (error) {
+    $("#up-ranking-list").innerHTML = `<p class="admin-empty">${escapeHtml(error.message)}</p>`;
+    $("#up-ranking-updated").textContent = "랭킹을 불러오지 못했습니다.";
+  }
+}
+
+function openUpRankingModal(options = {}) {
+  const events = activeUpEvents();
+  if (!events.length) return;
+  activeUpEventId = options.eventId || activeUpEventId || events[0].id;
+  openModal("#up-ranking-modal");
+  refreshUpRanking(Boolean(options.force));
+  window.clearInterval(upRankingRefreshTimer);
+  upRankingRefreshTimer = window.setInterval(() => refreshUpRanking(true), UP_REFRESH_INTERVAL_MS);
+}
+
+function closeUpRankingModal() {
+  window.clearInterval(upRankingRefreshTimer);
+  upRankingRefreshTimer = null;
+  closeModal("#up-ranking-modal");
+}
+
+function maybeOpenStartupUpRanking() {
+  if (upStartupHandled) return;
+  upStartupHandled = true;
+  const events = activeUpEvents();
+  const startupEvent = events.find((event) => event.showOnStartup) || events[0];
+  if (!startupEvent) return;
+  window.setTimeout(() => openUpRankingModal({ eventId: startupEvent.id }), 250);
 }
 
 function ratingInputForPicker(picker) {
@@ -1159,6 +1599,7 @@ function renderRandomResult(song) {
     <span class="picked-category">${categoryBadge(song.category)}</span>
     <h3>${escapeHtml(song.title)}</h3>
     <p>${escapeHtml(song.artist || "")}</p>
+    ${tagsMarkup(song)}
     <div class="picked-meta">
       <span>Inst ${linkButton(song.instUrl, "열기")}</span>
       <span>정와클립 ${linkButton(song.jeongwaClipUrl, "열기")}</span>
@@ -1213,15 +1654,30 @@ function closeRandomModal() {
   closeModal("#random-modal");
 }
 
+function updateCoverPreview(inputId, previewId, value) {
+  const input = $(inputId);
+  const preview = $(previewId);
+  const url = clean(value ?? input?.value);
+  if (!preview) return;
+
+  preview.innerHTML = url
+    ? `<span class="cover-preview-image song-cover has-image"><span class="song-cover-placeholder" aria-hidden="true">♪</span><img src="${escapeHtml(url)}" alt="커버 미리보기" data-cover-image></span>`
+    : "";
+  preview.classList.toggle("visible", Boolean(url));
+  bindCoverImageErrors(preview);
+}
+
 function openAddOneModal() {
   if (!ensureEditMode()) return;
   setFabMenu(false);
   populateCategorySelects();
-  $("#one-category").value = state.category;
+  const formCategory = categories.includes(state.category) ? state.category : categories[0];
+  $("#one-category").value = formCategory;
   $("#add-one-form").reset();
-  $("#one-category").value = state.category;
+  $("#one-category").value = formCategory;
   $("#one-status").textContent = "";
   setRatingValue("one-skill", 0);
+  updateCoverPreview("#one-cover", "#one-cover-preview", "");
   openModal("#add-one-modal");
   $("#one-title").focus();
 }
@@ -1234,9 +1690,10 @@ function openAddManyModal() {
   if (!ensureEditMode()) return;
   setFabMenu(false);
   populateCategorySelects();
-  $("#many-category").value = state.category;
+  const formCategory = categories.includes(state.category) ? state.category : categories[0];
+  $("#many-category").value = formCategory;
   $("#add-many-form").reset();
-  $("#many-category").value = state.category;
+  $("#many-category").value = formCategory;
   $("#many-status").textContent = "";
   openModal("#add-many-modal");
   $("#many-rows").focus();
@@ -1259,12 +1716,16 @@ function setEditFormValues(song) {
   $("#edit-category").value = song.category;
   $("#edit-title").value = song.title;
   $("#edit-artist").value = song.artist || "";
+  $("#edit-cover").value = song.coverUrl || "";
+  updateCoverPreview("#edit-cover", "#edit-cover-preview", song.coverUrl);
   $("#edit-inst").value = song.instUrl || "";
   $("#edit-clip").value = song.jeongwaClipUrl || "";
   setRatingValue("edit-skill", skillValue(song));
+  $("#edit-tags").value = normalizeTags(song.tags).join(", ");
   $("#edit-memo").value = memoText(song);
   $("#edit-status").textContent = "";
   $("#reset-edit-song").hidden = song.custom || !isEditedBaseSong(song.id);
+  $("#delete-edit-song").hidden = !song.custom;
 }
 
 function openEditSongModal(songId) {
@@ -1306,6 +1767,10 @@ async function updateSong(songId, updates) {
   });
 
   if (!normalized.title) return false;
+  if (normalized.tags.length && songTagsColumnReady !== true) {
+    $("#edit-status").textContent = "태그 저장 설정이 아직 필요합니다. Supabase 태그 SQL을 먼저 실행해주세요.";
+    return false;
+  }
 
   const recordType = original.custom ? "custom" : "override";
   const { error } = await authDb
@@ -1325,7 +1790,7 @@ async function updateSong(songId, updates) {
     editedSongsById[String(original.id)] = normalized;
   }
 
-  state.category = normalized.category;
+  if (state.category !== ALL_CATEGORY) state.category = normalized.category;
   refreshSongs();
   render();
   updateRandomCount();
@@ -1348,9 +1813,31 @@ async function resetEditedSong(songId) {
 
   const restored = findSongById(songId);
   if (restored) {
-    state.category = restored.category;
+    if (state.category !== ALL_CATEGORY) state.category = restored.category;
   }
 
+  render();
+  updateRandomCount();
+  return true;
+}
+
+async function deleteCustomSong(songId) {
+  const song = findSongById(songId);
+  if (!song?.custom) return false;
+
+  const { error } = await authDb
+    .from("song_changes")
+    .delete()
+    .eq("id", song.id)
+    .eq("record_type", "custom");
+
+  if (error) {
+    $("#edit-status").textContent = `삭제하지 못했습니다: ${error.message}`;
+    return false;
+  }
+
+  customSongs = customSongs.filter((item) => String(item.id) !== String(song.id));
+  refreshSongs();
   render();
   updateRandomCount();
   return true;
@@ -1365,6 +1852,9 @@ async function addCustomSongs(newSongs) {
   })).filter((song) => song.title);
 
   if (!normalized.length) return 0;
+  if (normalized.some((song) => song.tags.length) && songTagsColumnReady !== true) {
+    throw new Error("태그 저장 설정이 아직 필요합니다. Supabase 태그 SQL을 먼저 실행해주세요.");
+  }
 
   const { error } = await authDb
     .from("song_changes")
@@ -1385,9 +1875,11 @@ function songFromForm(form) {
     category: data.get("category"),
     title: data.get("title"),
     artist: data.get("artist"),
+    coverUrl: data.get("coverUrl"),
     instUrl: data.get("instUrl"),
     jeongwaClipUrl: data.get("jeongwaClipUrl"),
     skillLevel: data.get("skillLevel"),
+    tags: data.get("tags"),
     memo: data.get("memo"),
   };
 }
@@ -1402,34 +1894,305 @@ function isBulkHeader(cols) {
   return joined.includes("분류") && (joined.includes("노래 제목") || joined.includes("제목"));
 }
 
-function songFromBulkLine(line, fallbackCategory) {
+function songFromBulkLine(line, fallbackCategory, headerHasTags = null) {
   const cols = splitBulkLine(line).map(clean);
   if (cols.length < 2 || isBulkHeader(cols)) return null;
 
   const hasCategory = categories.includes(cols[0]);
   const offset = hasCategory ? 1 : 0;
+  const hasCoverColumn = cols.length - offset >= 7;
+  const mediaOffset = hasCoverColumn ? 1 : 0;
+  const tagIndex = offset + 5 + mediaOffset;
+  const hasTagsColumn = headerHasTags ?? cols.length > tagIndex + 1;
 
   return {
     category: hasCategory ? cols[0] : fallbackCategory,
     title: cols[offset],
     artist: cols[offset + 1],
-    instUrl: cols[offset + 2],
-    jeongwaClipUrl: cols[offset + 3],
-    skillLevel: cols[offset + 4],
-    memo: cols.slice(offset + 5).join(" "),
+    coverUrl: hasCoverColumn ? cols[offset + 2] : "",
+    instUrl: cols[offset + 2 + mediaOffset],
+    jeongwaClipUrl: cols[offset + 3 + mediaOffset],
+    skillLevel: cols[offset + 4 + mediaOffset],
+    tags: hasTagsColumn ? cols[tagIndex] : "",
+    memo: cols.slice(tagIndex + (hasTagsColumn ? 1 : 0)).join(" "),
   };
 }
 
 function parseBulkSongs(text, fallbackCategory) {
-  return text
+  const lines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => songFromBulkLine(line, fallbackCategory))
+    .filter((line) => line.trim());
+  const header = lines
+    .map((line) => splitBulkLine(line).map(clean))
+    .find((cols) => isBulkHeader(cols));
+  const headerHasTags = header
+    ? header.some((column) => normalize(column) === "태그")
+    : null;
+
+  return lines
+    .map((line) => songFromBulkLine(line, fallbackCategory, headerHasTags))
     .filter((song) => song && clean(song.title));
 }
 
+function catalogText(value) {
+  return normalize(value)
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .replace(/\b(feat|featuring|ft|remaster(?:ed)?|version|ver)\b.*$/i, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenSimilarity(left, right) {
+  const a = new Set(catalogText(left).split(" ").filter(Boolean));
+  const b = new Set(catalogText(right).split(" ").filter(Boolean));
+  if (!a.size || !b.size) return 0;
+  const common = [...a].filter((token) => b.has(token)).length;
+  return common / new Set([...a, ...b]).size;
+}
+
+function catalogVariants(value) {
+  const raw = normalize(value);
+  const variants = [catalogText(raw)];
+  for (const match of raw.matchAll(/\(([^)]*)\)|\[([^\]]*)\]/g)) {
+    variants.push(catalogText(match[1] || match[2]));
+  }
+  variants.push(raw.replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim());
+  return [...new Set(variants.filter(Boolean))];
+}
+
+function directTextSimilarity(left, right) {
+  const a = catalogText(left);
+  const b = catalogText(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.88;
+  return tokenSimilarity(a, b);
+}
+
+function textSimilarity(left, right) {
+  let best = 0;
+  catalogVariants(left).forEach((leftVariant) => {
+    catalogVariants(right).forEach((rightVariant) => {
+      best = Math.max(best, directTextSimilarity(leftVariant, rightVariant));
+    });
+  });
+  return best;
+}
+
+function itunesCountryFor(song) {
+  if (song.category === "J-POP") return "JP";
+  if (song.category === "POP/OST") return "US";
+  return "KR";
+}
+
+function itunesSearch(song) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `jeongwaItunes_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement("script");
+    const timer = window.setTimeout(() => finish(reject, new Error("검색 시간이 초과되었습니다.")), 12000);
+
+    function cleanup() {
+      window.clearTimeout(timer);
+      delete window[callbackName];
+      script.remove();
+    }
+
+    function finish(done, value) {
+      cleanup();
+      done(value);
+    }
+
+    window[callbackName] = (payload) => finish(resolve, Array.isArray(payload?.results) ? payload.results : []);
+    script.onerror = () => finish(reject, new Error("커버 검색 서버에 연결하지 못했습니다."));
+
+    const params = new URLSearchParams({
+      term: `${song.title} ${song.artist}`.trim(),
+      country: itunesCountryFor(song),
+      media: "music",
+      entity: "song",
+      limit: "12",
+      callback: callbackName,
+    });
+    script.src = `https://itunes.apple.com/search?${params.toString()}`;
+    document.head.append(script);
+  });
+}
+
+function bestCoverMatch(song, results) {
+  const ranked = results.map((result) => {
+    const titleScore = textSimilarity(song.title, result.trackName);
+    const artistScore = song.artist ? textSimilarity(song.artist, result.artistName) : 0.72;
+    return { result, titleScore, artistScore, score: titleScore * 0.74 + artistScore * 0.26 };
+  }).sort((a, b) => b.score - a.score);
+
+  const best = ranked[0];
+  if (!best || best.titleScore < 0.78 || best.artistScore < 0.32 || best.score < 0.7) return null;
+  return best.result;
+}
+
+function upscaleItunesArtwork(url) {
+  return clean(url)
+    .replace(/\/\d+x\d+bb\.(jpg|png)$/i, "/600x600bb.$1")
+    .replace(/\/\d+x\d+bb\//i, "/600x600bb/");
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function persistSongCover(song, coverUrl) {
+  const normalized = normalizeSongRecord({
+    ...song,
+    coverUrl,
+    edited: song.edited || !song.custom,
+  });
+  const recordType = song.custom ? "custom" : "override";
+  const { error } = await authDb
+    .from("song_changes")
+    .upsert(songToChangeRow(normalized, recordType), { onConflict: "id" });
+  if (error) throw error;
+
+  if (song.custom) {
+    customSongs = customSongs.map((item) => String(item.id) === String(song.id) ? normalized : item);
+  } else {
+    editedSongsById[String(song.id)] = normalized;
+  }
+}
+
+function coverFillCandidates() {
+  const scope = $("#cover-fill-scope").value;
+  const pool = scope === "all" ? songs : filteredSongs();
+  return pool.filter((song) => !clean(song.coverUrl));
+}
+
+function openCoverFillModal() {
+  if (!ensureEditMode()) return;
+  setFabMenu(false);
+  coverFillCancelled = false;
+  const ready = songCoverColumnReady === true;
+  $("#cover-fill-scope").disabled = false;
+  $("#start-cover-fill").disabled = !ready;
+  $("#stop-cover-fill").disabled = true;
+  $("#cover-fill-progress").value = 0;
+  $("#cover-fill-progress").max = 1;
+  $("#cover-fill-status").textContent = ready
+    ? "커버가 비어 있는 곡만 처리합니다."
+    : "먼저 Supabase에서 최신 마이그레이션 SQL을 실행한 뒤 페이지를 새로고침해주세요.";
+  openModal("#cover-fill-modal");
+}
+
+function closeCoverFillModal() {
+  if (coverFillRunning) coverFillCancelled = true;
+  closeModal("#cover-fill-modal");
+}
+
+async function startCoverFill() {
+  if (coverFillRunning || songCoverColumnReady !== true) return;
+  const candidates = coverFillCandidates();
+  const progress = $("#cover-fill-progress");
+  const status = $("#cover-fill-status");
+  if (!candidates.length) {
+    status.textContent = "선택한 범위에는 커버가 비어 있는 곡이 없습니다.";
+    return;
+  }
+
+  coverFillRunning = true;
+  coverFillCancelled = false;
+  $("#start-cover-fill").disabled = true;
+  $("#stop-cover-fill").disabled = false;
+  $("#cover-fill-scope").disabled = true;
+  progress.max = candidates.length;
+  progress.value = 0;
+
+  let matched = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    if (coverFillCancelled) break;
+    const song = candidates[index];
+    status.textContent = `${index + 1}/${candidates.length} · ${song.artist || "아티스트 미등록"} - ${song.title}`;
+
+    try {
+      const result = bestCoverMatch(song, await itunesSearch(song));
+      const coverUrl = upscaleItunesArtwork(result?.artworkUrl100 || result?.artworkUrl60);
+      if (result && coverUrl) {
+        await persistSongCover(song, coverUrl);
+        matched += 1;
+      } else {
+        skipped += 1;
+      }
+    } catch (error) {
+      console.warn("커버 자동채우기 실패", song.title, error.message);
+      failed += 1;
+    }
+
+    progress.value = index + 1;
+    if (index < candidates.length - 1 && !coverFillCancelled) await wait(450);
+  }
+
+  refreshSongs();
+  render();
+  coverFillRunning = false;
+  $("#start-cover-fill").disabled = false;
+  $("#stop-cover-fill").disabled = true;
+  $("#cover-fill-scope").disabled = false;
+  const prefix = coverFillCancelled ? "중지됨" : "완료";
+  status.textContent = `${prefix} · 채움 ${matched}곡 · 일치 결과 없음 ${skipped}곡 · 오류 ${failed}곡`;
+}
+
 function bindEvents() {
+  $("#view-toggle").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-view-mode]");
+    if (!button) return;
+    state.viewMode = button.dataset.viewMode === "album" ? "album" : "list";
+    localStorage.setItem(viewModeStorageKey, state.viewMode);
+    render();
+  });
+
+  $("#favorite-filter").addEventListener("click", () => {
+    if (!isSignedIn()) {
+      openLoginModal();
+      $("#login-status").textContent = "즐겨찾기는 로그인 후 사용할 수 있습니다.";
+      return;
+    }
+    if (songReactionsReady !== true) {
+      showNotice("먼저 Supabase 반응 기능 SQL을 실행해주세요.");
+      return;
+    }
+    state.favoritesOnly = !state.favoritesOnly;
+    render();
+    updateRandomCount();
+  });
+
+  $("#tag-filter-list").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-filter-tag]");
+    if (!button) return;
+
+    const tag = clean(button.dataset.filterTag);
+    if (!tag) {
+      state.selectedTags = [];
+    } else {
+      const key = normalize(tag);
+      const selected = state.selectedTags.some((item) => normalize(item) === key);
+      state.selectedTags = selected
+        ? state.selectedTags.filter((item) => normalize(item) !== key)
+        : [...state.selectedTags, tag];
+    }
+
+    render();
+    updateRandomCount();
+  });
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-song-reaction]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSongReaction(button.dataset.reactionSongId, button.dataset.songReaction);
+  });
+
   $("#song-search").addEventListener("input", (event) => {
     state.query = event.target.value;
     render();
@@ -1481,15 +2244,34 @@ function bindEvents() {
     event.preventDefault();
     openSongEditFromElement(event.target);
   });
+  $("#album-grid").addEventListener("click", (event) => {
+    if (isInteractiveTarget(event.target)) return;
+    openSongEditFromElement(event.target);
+  });
+  $("#album-grid").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openSongEditFromElement(event.target);
+  });
   $("#add-fab").addEventListener("click", (event) => {
     event.stopPropagation();
     toggleFabMenu();
   });
   $("#open-add-one").addEventListener("click", openAddOneModal);
   $("#open-add-many").addEventListener("click", openAddManyModal);
+  $("#open-cover-fill").addEventListener("click", openCoverFillModal);
   $("#close-add-one").addEventListener("click", closeAddOneModal);
   $("#close-add-many").addEventListener("click", closeAddManyModal);
   $("#close-edit-song").addEventListener("click", closeEditSongModal);
+  $("#close-cover-fill").addEventListener("click", closeCoverFillModal);
+  $("#start-cover-fill").addEventListener("click", startCoverFill);
+  $("#stop-cover-fill").addEventListener("click", () => {
+    coverFillCancelled = true;
+    $("#stop-cover-fill").disabled = true;
+    $("#cover-fill-status").textContent = "현재 곡까지만 처리하고 중지합니다.";
+  });
+  $("#one-cover").addEventListener("input", () => updateCoverPreview("#one-cover", "#one-cover-preview"));
+  $("#edit-cover").addEventListener("input", () => updateCoverPreview("#edit-cover", "#edit-cover-preview"));
   $("#draw-random").addEventListener("click", drawRandom);
   $("#random-modal").addEventListener("click", (event) => {
     if (event.target.id === "random-modal") closeRandomModal();
@@ -1508,6 +2290,12 @@ function bindEvents() {
   });
   $("#edit-song-modal").addEventListener("click", (event) => {
     if (event.target.id === "edit-song-modal") closeEditSongModal();
+  });
+  $("#cover-fill-modal").addEventListener("click", (event) => {
+    if (event.target.id === "cover-fill-modal") closeCoverFillModal();
+  });
+  $("#up-ranking-modal").addEventListener("click", (event) => {
+    if (event.target.id === "up-ranking-modal") closeUpRankingModal();
   });
 
   document.addEventListener("click", (event) => {
@@ -1545,7 +2333,6 @@ function bindEvents() {
   $("#up-event-list").addEventListener("click", async (event) => {
     const editButton = event.target.closest("[data-edit-up-event]");
     const deleteButton = event.target.closest("[data-delete-up-event]");
-    const deleteEntryButton = event.target.closest("[data-delete-up-entry]");
 
     if (editButton) {
       editUpEvent(editButton.dataset.editUpEvent);
@@ -1554,19 +2341,17 @@ function bindEvents() {
 
     if (deleteButton) {
       await deleteUpEvent(deleteButton.dataset.deleteUpEvent);
-      return;
-    }
-
-    if (deleteEntryButton) {
-      await deleteUpEntry(deleteEntryButton.dataset.eventId, deleteEntryButton.dataset.deleteUpEntry);
     }
   });
 
-  $("#up-event-list").addEventListener("submit", async (event) => {
-    const form = event.target.closest(".up-entry-form");
-    if (!form) return;
-    event.preventDefault();
-    await addUpEntry(form);
+  $("#open-up-ranking").addEventListener("click", () => openUpRankingModal());
+  $("#close-up-ranking").addEventListener("click", closeUpRankingModal);
+  $("#refresh-up-ranking").addEventListener("click", () => refreshUpRanking(true));
+  $("#up-ranking-tabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-up-ranking-event]");
+    if (!button) return;
+    activeUpEventId = button.dataset.upRankingEvent;
+    refreshUpRanking();
   });
 
   $("#add-one-form").addEventListener("submit", async (event) => {
@@ -1610,6 +2395,16 @@ function bindEvents() {
     if (await resetEditedSong(songId)) closeEditSongModal();
   });
 
+  $("#delete-edit-song").addEventListener("click", async () => {
+    const songId = $("#edit-id").value;
+    const song = findSongById(songId);
+    if (!song?.custom) return;
+    if (!window.confirm(`'${song.title}' 곡을 삭제할까요?`)) return;
+
+    $("#edit-status").textContent = "삭제 중입니다.";
+    if (await deleteCustomSong(songId)) closeEditSongModal();
+  });
+
   document.querySelectorAll('input[name="random-scope"], #exclude-homework').forEach((input) => {
     input.addEventListener("change", updateRandomCount);
   });
@@ -1624,6 +2419,8 @@ function bindEvents() {
       if (!$("#add-one-modal").hidden) closeAddOneModal();
       if (!$("#add-many-modal").hidden) closeAddManyModal();
       if (!$("#edit-song-modal").hidden) closeEditSongModal();
+      if (!$("#cover-fill-modal").hidden) closeCoverFillModal();
+      if (!$("#up-ranking-modal").hidden) closeUpRankingModal();
     }
   });
 }
@@ -1633,4 +2430,6 @@ populateCategorySelects();
 bindRatingPickers();
 updateAuthUi();
 render();
+window.lucide?.createIcons();
+initLiveStatus();
 refreshSharedSongData().finally(initAuth);
