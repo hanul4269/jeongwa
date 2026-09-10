@@ -194,6 +194,17 @@ button {
   overflow: visible;
 }
 
+.guide-header-btn {
+  padding: 0;
+}
+
+.header-lucide-icon,
+.guide-header-btn svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.2;
+}
+
 .header-icon-svg text {
   font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -708,6 +719,7 @@ button {
   background: #20242a;
   color: #d7dce3;
   font-size: 13px;
+  text-align: center;
 }
 
 .song-table tbody tr:nth-child(even) td {
@@ -757,7 +769,7 @@ button {
 
 .song-table th:nth-child(5),
 .song-table td:nth-child(5) {
-  width: 62px;
+  width: 84px;
   text-align: center;
 }
 
@@ -812,6 +824,7 @@ button {
   text-decoration: none;
   font-size: 13px;
   font-weight: 850;
+  white-space: nowrap;
 }
 
 .link-pill:hover,
@@ -1212,9 +1225,9 @@ button {
   height: 58px;
   border: 0;
   border-radius: 50%;
-  background: #8bd04f;
+  background: var(--blue);
   color: #ffffff;
-  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(144, 199, 255, 0.12);
   font-size: 34px;
   font-weight: 800;
   line-height: 1;
@@ -1223,7 +1236,7 @@ button {
 
 .add-fab:hover,
 .add-fab:focus-visible {
-  background: #9cdf5f;
+  background: #4a8aca;
   outline: none;
   transform: translateY(-1px);
 }
@@ -1290,6 +1303,64 @@ button {
   width: min(760px, 100%);
   max-height: min(880px, calc(100vh - 40px));
   overflow-y: auto;
+}
+
+.form-modal.guide-modal {
+  width: min(680px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+  overflow-y: auto;
+}
+
+.guide-section {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+
+.guide-section:last-child {
+  padding-bottom: 0;
+}
+
+.guide-section h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: guide-step;
+}
+
+.guide-steps li {
+  display: grid;
+  grid-template-columns: 24px 108px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  counter-increment: guide-step;
+}
+
+.guide-steps li::before {
+  content: counter(guide-step);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--focus);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guide-steps strong {
+  color: var(--text);
 }
 
 .modal-close {
@@ -2226,6 +2297,19 @@ button {
     display: none;
   }
 
+  .guide-steps li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+
+  .guide-steps strong {
+    padding-top: 1px;
+  }
+
+  .guide-steps span {
+    grid-column: 2;
+  }
+
   .brand-area {
     gap: 7px;
   }
@@ -2334,5 +2418,55 @@ button {
 
   .tag-filter-label {
     padding-top: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .site-header {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .header-links {
+    gap: 4px;
+  }
+
+  .header-link {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .header-icon-svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .header-lucide-icon,
+  .guide-header-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .live-badge {
+    width: 20px;
+    min-height: 20px;
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .live-badge span:last-child {
+    display: none;
+  }
+
+  .auth-button {
+    min-height: 30px;
+    padding: 0 7px;
+    font-size: 12px;
   }
 }

@@ -784,6 +784,14 @@ function closeModal(id) {
   $(id).hidden = true;
 }
 
+function openGuideModal() {
+  openModal("#guide-modal");
+}
+
+function closeGuideModal() {
+  closeModal("#guide-modal");
+}
+
 function renderLiveStatus(isLive, title = "", unavailable = false) {
   const badge = $("#live-badge");
   if (!badge) return;
@@ -2224,6 +2232,8 @@ function bindEvents() {
   $("#google-login-button").addEventListener("click", signInWithGoogle);
   $("#close-login").addEventListener("click", closeLoginModal);
   $("#close-admin").addEventListener("click", closeAdminModal);
+  $("#open-guide").addEventListener("click", openGuideModal);
+  $("#close-guide").addEventListener("click", closeGuideModal);
   $("#open-random").addEventListener("click", openRandomModal);
   $("#close-random").addEventListener("click", closeRandomModal);
   $("#song-table-body").addEventListener("click", (event) => {
@@ -2275,6 +2285,9 @@ function bindEvents() {
   $("#draw-random").addEventListener("click", drawRandom);
   $("#random-modal").addEventListener("click", (event) => {
     if (event.target.id === "random-modal") closeRandomModal();
+  });
+  $("#guide-modal").addEventListener("click", (event) => {
+    if (event.target.id === "guide-modal") closeGuideModal();
   });
   $("#login-modal").addEventListener("click", (event) => {
     if (event.target.id === "login-modal") closeLoginModal();
@@ -2413,6 +2426,7 @@ function bindEvents() {
     if (event.key === "Escape") {
       setAuthMenu(false);
       setFabMenu(false);
+      if (!$("#guide-modal").hidden) closeGuideModal();
       if (!$("#login-modal").hidden) closeLoginModal();
       if (!$("#admin-modal").hidden) closeAdminModal();
       if (!$("#random-modal").hidden) closeRandomModal();

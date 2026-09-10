@@ -55,6 +55,9 @@
             <path d="M12 7h3.5A2.2 2.2 0 1 0 13.9 3.3C12.8 4.3 12 7 12 7z"></path>
           </svg>
         </a>
+        <button class="header-link guide-header-btn" id="open-guide" type="button" aria-label="사용 가이드 열기" title="사용 가이드">
+          <i class="header-lucide-icon" data-lucide="circle-help" aria-hidden="true"></i>
+        </button>
       </nav>
       <div class="auth-area" id="auth-area">
         <button class="auth-button" id="auth-button" type="button" aria-haspopup="true" aria-expanded="false">
@@ -164,6 +167,41 @@
       <p class="footer-copyright">© 2026 JEONGWA 사이트 모든 저작물의 권리는 원저작자에게 있습니다.</p>
     </div>
   </footer>
+
+  <div class="modal-backdrop" id="guide-modal" hidden>
+    <section class="form-modal guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+      <button class="modal-close" id="close-guide" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">이용 안내</div>
+      <h2 id="guide-title">정와 노래책 사용 가이드</h2>
+
+      <div class="guide-section">
+        <h3>곡 찾기와 보기</h3>
+        <ol class="guide-steps">
+          <li><strong>분류 탭</strong><span>전체, K-POP, J-POP, POP/OST, 숙제곡을 골라 볼 수 있습니다.</span></li>
+          <li><strong>검색과 태그</strong><span>제목, 아티스트, 태그, 메모로 검색하고 여러 태그를 함께 선택할 수 있습니다.</span></li>
+          <li><strong>보기 방식</strong><span>목록 아이콘과 앨범 아이콘으로 리스트형·앨범형을 전환합니다.</span></li>
+          <li><strong>랜덤뽑기</strong><span>현재 검색 결과 또는 전체 곡 중에서 한 곡을 무작위로 뽑습니다.</span></li>
+        </ol>
+      </div>
+
+      <div class="guide-section">
+        <h3>좋아요와 즐겨찾기</h3>
+        <ol class="guide-steps">
+          <li><strong>좋아요</strong><span>곡의 하트 버튼을 눌러 좋아요를 남길 수 있습니다.</span></li>
+          <li><strong>즐겨찾기</strong><span>로그인 후 별 버튼으로 곡을 저장하고, 상단 별 아이콘으로 저장한 곡만 모아봅니다.</span></li>
+        </ol>
+      </div>
+
+      <div class="guide-section">
+        <h3>편집자 기능</h3>
+        <ol class="guide-steps">
+          <li><strong>곡 수정</strong><span>편집자로 로그인한 뒤 곡 행이나 앨범 카드를 누르면 수정창이 열립니다.</span></li>
+          <li><strong>곡 추가</strong><span>오른쪽 아래 + 버튼에서 한 곡 추가, 여러 곡 추가, 커버 자동채우기를 사용합니다.</span></li>
+          <li><strong>편집설정</strong><span>로그인 메뉴에서 편집자 관리와 UP 이벤트를 설정합니다.</span></li>
+        </ol>
+      </div>
+    </section>
+  </div>
 
   <div class="modal-backdrop" id="random-modal" hidden>
     <section class="random-modal" role="dialog" aria-modal="true" aria-labelledby="random-title">
