@@ -19,6 +19,16 @@ const categoryLabels = {
   "POP/OST": "POP/OST",
   "숙제곡": "숙제곡",
 };
+const mobileSongViewQuery = window.matchMedia("(max-width: 820px)");
+const modalReturnFocus = new Map();
+const modalFocusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled]):not([type='hidden'])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 const state = {
   category: ALL_CATEGORY,
@@ -188,11 +198,16 @@ function refreshSongs() {
 }
 
 function normalizeUrl(value) {
-  const text = clean(value);
+  let text = clean(value);
   if (!text) return "";
-  if (/^https?:\/\//i.test(text)) return text;
-  if (/^(youtu\.be|www\.|youtube\.com)/i.test(text)) return `https://${text}`;
-  return text;
+  if (/^(youtu\.be|www\.|youtube\.com)/i.test(text)) text = `https://${text}`;
+
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 function normalizeSkill(value) {
@@ -529,7 +544,7 @@ function showNotice(message) {
 }
 
 function linkButton(url, label) {
-  const href = String(url ?? "").trim();
+  const href = normalizeUrl(url);
   if (!href) return '<span class="muted">-</span>';
   return `<a class="link-pill" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
 }
@@ -761,27 +776,73 @@ function render() {
   renderTagFilter(availableTags);
   const items = filteredSongs();
   renderSummary(items);
-  renderTable(items);
-  renderCards(items);
-  renderAlbumGrid(items);
   renderViewToggle();
   $("#empty-state").hidden = items.length !== 0;
   const albumMode = state.viewMode === "album";
-  $("#table-wrap").hidden = items.length === 0 || albumMode;
-  $("#song-card-list").hidden = items.length === 0 || albumMode;
+  const mobileListMode = mobileSongViewQuery.matches && !albumMode;
+  const tableMode = !mobileSongViewQuery.matches && !albumMode;
+
+  $("#table-wrap").hidden = items.length === 0 || !tableMode;
+  $("#song-card-list").hidden = items.length === 0 || !mobileListMode;
   $("#album-grid").hidden = items.length === 0 || !albumMode;
+
+  if (items.length === 0) {
+    $("#song-table-body").innerHTML = "";
+    $("#song-card-list").innerHTML = "";
+    $("#album-grid").innerHTML = "";
+  } else if (albumMode) {
+    $("#song-table-body").innerHTML = "";
+    $("#song-card-list").innerHTML = "";
+    renderAlbumGrid(items);
+  } else if (mobileListMode) {
+    $("#song-table-body").innerHTML = "";
+    $("#album-grid").innerHTML = "";
+    renderCards(items);
+  } else {
+    $("#song-card-list").innerHTML = "";
+    $("#album-grid").innerHTML = "";
+    renderTable(items);
+  }
+
   $("#clear-search").classList.toggle("visible", state.query.trim().length > 0);
   bindCoverImageErrors($(".songbook"));
   window.lucide?.createIcons();
 }
 
+function visibleModal() {
+  return [...document.querySelectorAll(".modal-backdrop:not([hidden])")].at(-1) || null;
+}
+
+function focusableModalElements(modal) {
+  return [...modal.querySelectorAll(modalFocusableSelector)].filter((element) => (
+    !element.hidden && element.getClientRects().length > 0
+  ));
+}
+
+function syncModalPageState() {
+  document.body.classList.toggle("modal-open", Boolean(visibleModal()));
+}
+
 function openModal(id) {
   const modal = $(id);
+  if (!modal) return;
+  if (document.activeElement instanceof HTMLElement) {
+    modalReturnFocus.set(id, document.activeElement);
+  }
   modal.hidden = false;
+  syncModalPageState();
+  focusableModalElements(modal)[0]?.focus();
 }
 
 function closeModal(id) {
-  $(id).hidden = true;
+  const modal = $(id);
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  syncModalPageState();
+
+  const returnTarget = modalReturnFocus.get(id);
+  modalReturnFocus.delete(id);
+  if (returnTarget?.isConnected) returnTarget.focus();
 }
 
 function openGuideModal() {
@@ -1208,6 +1269,8 @@ async function removeEditorEmail(email) {
     return;
   }
 
+  if (!window.confirm(`'${normalized}' 편집자 권한을 삭제할까요?`)) return false;
+
   const { error } = await authDb
     .from("editors")
     .delete()
@@ -1359,6 +1422,10 @@ async function saveUpEvent(form) {
 }
 
 async function deleteUpEvent(eventId) {
+  const event = upEvents.find((item) => item.id === eventId);
+  if (!event) return false;
+  if (!window.confirm(`'${event.title}' UP 이벤트를 삭제할까요?`)) return false;
+
   const { error } = await authDb
     .from("up_events")
     .delete()
@@ -2151,6 +2218,8 @@ async function startCoverFill() {
 }
 
 function bindEvents() {
+  mobileSongViewQuery.addEventListener("change", render);
+
   $("#view-toggle").addEventListener("click", (event) => {
     const button = event.target.closest("[data-view-mode]");
     if (!button) return;
@@ -2423,6 +2492,28 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
+    const modal = visibleModal();
+    if (event.key === "Tab" && modal) {
+      const focusable = focusableModalElements(modal);
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!modal.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
     if (event.key === "Escape") {
       setAuthMenu(false);
       setFabMenu(false);
