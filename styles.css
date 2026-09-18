@@ -695,7 +695,8 @@ button {
 }
 
 .table-wrap {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -709,7 +710,7 @@ button {
 
 .song-table {
   width: 100%;
-  min-width: 0;
+  min-width: 1120px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -775,13 +776,13 @@ button {
 
 .song-table th:nth-child(3),
 .song-table td:nth-child(3) {
-  width: 23%;
+  width: 22%;
   font-weight: 800;
 }
 
 .song-table th:nth-child(4),
 .song-table td:nth-child(4) {
-  width: 15%;
+  width: 14%;
 }
 
 .song-table th:nth-child(5),
@@ -798,6 +799,12 @@ button {
 
 .song-table th:nth-child(7),
 .song-table td:nth-child(7) {
+  width: 72px;
+  text-align: center;
+}
+
+.song-table th:nth-child(8),
+.song-table td:nth-child(8) {
   width: 104px;
   text-align: center;
 }
@@ -2068,6 +2075,10 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.form-grid-media {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .cover-form-preview {

@@ -143,6 +143,7 @@
               <th>아티스트</th>
               <th>Inst</th>
               <th>정와클립</th>
+              <th>가사</th>
               <th>숙련도</th>
               <th>메모</th>
             </tr>
@@ -197,6 +198,7 @@
         <ol class="guide-steps">
           <li><strong>곡 수정</strong><span>편집자로 로그인한 뒤 곡 행이나 앨범 카드를 누르면 수정창이 열립니다.</span></li>
           <li><strong>곡 추가</strong><span>오른쪽 아래 + 버튼에서 한 곡 추가, 여러 곡 추가, 커버 자동채우기를 사용합니다.</span></li>
+          <li><strong>정렬과 링크</strong><span>곡은 분류·아티스트·제목 순으로 자동 정렬되며, 수정창에서 Inst·정와클립·가사 링크를 관리합니다.</span></li>
           <li><strong>편집설정</strong><span>로그인 메뉴에서 편집자 관리와 UP 이벤트를 설정합니다.</span></li>
         </ol>
       </div>
@@ -383,7 +385,7 @@
           <input id="one-cover" name="coverUrl" type="url" inputmode="url" placeholder="https://...">
           <span class="cover-form-preview" id="one-cover-preview" aria-hidden="true"></span>
         </label>
-        <div class="form-grid">
+        <div class="form-grid form-grid-media">
           <label>
             <span>Inst</span>
             <input id="one-inst" name="instUrl" type="url" inputmode="url">
@@ -391,6 +393,10 @@
           <label>
             <span>정와클립</span>
             <input id="one-clip" name="jeongwaClipUrl" type="url" inputmode="url">
+          </label>
+          <label>
+            <span>가사 링크</span>
+            <input id="one-lyrics" name="lyricsUrl" type="url" inputmode="url" placeholder="https://...">
           </label>
         </div>
         <label>
@@ -431,7 +437,7 @@
         </label>
         <label>
           <span>곡 목록</span>
-          <textarea id="many-rows" name="rows" rows="12" placeholder="분류	노래 제목	아티스트	커버 이미지 URL	Inst	정와클립	숙련도	태그	메모"></textarea>
+          <textarea id="many-rows" name="rows" rows="12" placeholder="분류	노래 제목	아티스트	커버 이미지 URL	Inst	정와클립	가사 링크	숙련도	태그	메모"></textarea>
           <small>태그가 여러 개라면 한 칸 안에서 슬래시(/)로 구분합니다.</small>
         </label>
         <p class="form-status" id="many-status" aria-live="polite"></p>
@@ -464,7 +470,7 @@
           <input id="edit-cover" name="coverUrl" type="url" inputmode="url" placeholder="https://...">
           <span class="cover-form-preview" id="edit-cover-preview" aria-hidden="true"></span>
         </label>
-        <div class="form-grid">
+        <div class="form-grid form-grid-media">
           <label>
             <span>Inst</span>
             <input id="edit-inst" name="instUrl" type="url" inputmode="url">
@@ -472,6 +478,10 @@
           <label>
             <span>정와클립</span>
             <input id="edit-clip" name="jeongwaClipUrl" type="url" inputmode="url">
+          </label>
+          <label>
+            <span>가사 링크</span>
+            <input id="edit-lyrics" name="lyricsUrl" type="url" inputmode="url" placeholder="https://...">
           </label>
         </div>
         <label>

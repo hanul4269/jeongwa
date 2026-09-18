@@ -82,6 +82,7 @@ create table if not exists public.song_changes (
   cover_url text not null default '',
   inst_url text not null default '',
   jeongwa_clip_url text not null default '',
+  lyrics_url text not null default '',
   skill_level smallint not null default 0 check (skill_level between 0 and 5),
   tags text[] not null default '{}'::text[],
   memo text not null default '',
@@ -96,6 +97,7 @@ create table if not exists public.song_changes (
 
 alter table public.song_changes add column if not exists cover_url text not null default '';
 alter table public.song_changes add column if not exists tags text[] not null default '{}'::text[];
+alter table public.song_changes add column if not exists lyrics_url text not null default '';
 
 create index if not exists song_changes_tags_idx
 on public.song_changes using gin (tags);

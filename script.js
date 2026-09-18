@@ -12,6 +12,10 @@ const UP_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
 const ALL_CATEGORY = "전체";
 const categories = ["K-POP", "J-POP", "POP/OST", "숙제곡"];
+const songCollator = new Intl.Collator("ko", {
+  numeric: true,
+  sensitivity: "base",
+});
 const categoryLabels = {
   "전체": "전체",
   "K-POP": "K-POP",
@@ -56,6 +60,7 @@ let activeAdminTab = "editors";
 let legacyMigrationPromise = null;
 let songCoverColumnReady = null;
 let songTagsColumnReady = null;
+let songLyricsColumnReady = null;
 let coverFillCancelled = false;
 let coverFillRunning = false;
 let songReactionsReady = null;
@@ -189,8 +194,27 @@ function applyStoredEdit(song) {
   });
 }
 
+function compareCatalogText(left, right) {
+  const leftText = clean(left);
+  const rightText = clean(right);
+  if (!leftText && !rightText) return 0;
+  if (!leftText) return 1;
+  if (!rightText) return -1;
+  return songCollator.compare(leftText, rightText);
+}
+
+function compareSongs(left, right) {
+  return categories.indexOf(left.category) - categories.indexOf(right.category)
+    || compareCatalogText(left.artist, right.artist)
+    || compareCatalogText(left.title, right.title)
+    || songCollator.compare(String(left.id), String(right.id));
+}
+
 function mergeSongs() {
-  return [...baseSongs.map(applyStoredEdit), ...customSongs.map(normalizeSongRecord)];
+  return [
+    ...baseSongs.map(applyStoredEdit),
+    ...customSongs.map(normalizeSongRecord),
+  ].sort(compareSongs);
 }
 
 function refreshSongs() {
@@ -246,6 +270,7 @@ function normalizeSongRecord(song) {
     coverUrl: normalizeUrl(song.coverUrl ?? song.cover_url),
     instUrl: normalizeUrl(song.instUrl),
     jeongwaClipUrl: normalizeUrl(song.jeongwaClipUrl),
+    lyricsUrl: normalizeUrl(song.lyricsUrl ?? song.lyrics_url),
     skillLevel: normalizeSkill(song.skillLevel),
     tags: normalizeTags(song.tags),
     memo: clean(song.memo ?? song.note),
@@ -307,6 +332,7 @@ function songToChangeRow(song, recordType) {
 
   if (songCoverColumnReady !== false) row.cover_url = normalized.coverUrl;
   if (songTagsColumnReady !== false) row.tags = normalized.tags;
+  if (songLyricsColumnReady !== false) row.lyrics_url = normalized.lyricsUrl;
   return row;
 }
 
@@ -320,6 +346,7 @@ function songFromChangeRow(row) {
     coverUrl: row.cover_url,
     instUrl: row.inst_url,
     jeongwaClipUrl: row.jeongwa_clip_url,
+    lyricsUrl: row.lyrics_url,
     skillLevel: row.skill_level,
     tags: row.tags,
     memo: row.memo,
@@ -360,10 +387,11 @@ async function refreshSharedSongData() {
   let data = null;
   let error = null;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const columns = [...requiredColumns];
-    if (songCoverColumnReady !== false) columns.splice(6, 0, "cover_url");
-    if (songTagsColumnReady !== false) columns.splice(columns.length - 2, 0, "tags");
+    if (songCoverColumnReady !== false) columns.push("cover_url");
+    if (songTagsColumnReady !== false) columns.push("tags");
+    if (songLyricsColumnReady !== false) columns.push("lyrics_url");
 
     ({ data, error } = await authDb
       .from("song_changes")
@@ -373,6 +401,7 @@ async function refreshSharedSongData() {
     if (!error) {
       if (columns.includes("cover_url")) songCoverColumnReady = true;
       if (columns.includes("tags")) songTagsColumnReady = true;
+      if (columns.includes("lyrics_url")) songLyricsColumnReady = true;
       break;
     }
 
@@ -383,6 +412,10 @@ async function refreshSharedSongData() {
     }
     if (/\btags?\b/i.test(error.message || "") && songTagsColumnReady !== false) {
       songTagsColumnReady = false;
+      retry = true;
+    }
+    if (/lyrics_url/i.test(error.message || "") && songLyricsColumnReady !== false) {
+      songLyricsColumnReady = false;
       retry = true;
     }
     if (!retry) break;
@@ -627,6 +660,7 @@ function matchesQuery(song, query) {
     memoText(song),
     song.instUrl,
     song.jeongwaClipUrl,
+    song.lyricsUrl,
     song.category,
     normalizeTags(song.tags).join(" "),
   ].join(" "));
@@ -691,6 +725,7 @@ function renderTable(items) {
       <td>${escapeHtml(song.artist || "")}</td>
       <td>${linkButton(song.instUrl, "Inst")}</td>
       <td>${linkButton(song.jeongwaClipUrl, "클립")}</td>
+      <td>${linkButton(song.lyricsUrl, "가사")}</td>
       <td class="skill-cell">${skillFish(song)}</td>
       <td class="${memoText(song) ? "memo" : "muted"}">${memoText(song) ? escapeHtml(memoText(song)) : "-"}</td>
     </tr>
@@ -717,6 +752,7 @@ function renderCards(items) {
       <div class="song-card-meta">
         <span>Inst ${linkButton(song.instUrl, "열기")}</span>
         <span>정와클립 ${linkButton(song.jeongwaClipUrl, "열기")}</span>
+        <span>가사 ${linkButton(song.lyricsUrl, "열기")}</span>
         <span>숙련도 ${skillFish(song)}</span>
       </div>
       ${memoText(song) ? `<div class="song-card-memo">${escapeHtml(memoText(song))}</div>` : ""}
@@ -742,6 +778,7 @@ function renderAlbumGrid(items) {
         <div class="album-card-links">
           ${song.instUrl ? linkButton(song.instUrl, "Inst") : ""}
           ${song.jeongwaClipUrl ? linkButton(song.jeongwaClipUrl, "클립") : ""}
+          ${song.lyricsUrl ? linkButton(song.lyricsUrl, "가사") : ""}
         </div>
         ${memoText(song) ? `<div class="album-card-memo">${escapeHtml(memoText(song))}</div>` : ""}
       </div>
@@ -1678,6 +1715,7 @@ function renderRandomResult(song) {
     <div class="picked-meta">
       <span>Inst ${linkButton(song.instUrl, "열기")}</span>
       <span>정와클립 ${linkButton(song.jeongwaClipUrl, "열기")}</span>
+      <span>가사 ${linkButton(song.lyricsUrl, "열기")}</span>
       <span>숙련도 ${skillFish(song)}</span>
     </div>
     ${memoText(song) ? `<div class="picked-note">${escapeHtml(memoText(song))}</div>` : ""}
@@ -1795,6 +1833,7 @@ function setEditFormValues(song) {
   updateCoverPreview("#edit-cover", "#edit-cover-preview", song.coverUrl);
   $("#edit-inst").value = song.instUrl || "";
   $("#edit-clip").value = song.jeongwaClipUrl || "";
+  $("#edit-lyrics").value = song.lyricsUrl || "";
   setRatingValue("edit-skill", skillValue(song));
   $("#edit-tags").value = normalizeTags(song.tags).join(", ");
   $("#edit-memo").value = memoText(song);
@@ -1844,6 +1883,10 @@ async function updateSong(songId, updates) {
   if (!normalized.title) return false;
   if (normalized.tags.length && songTagsColumnReady !== true) {
     $("#edit-status").textContent = "태그 저장 설정이 아직 필요합니다. Supabase 태그 SQL을 먼저 실행해주세요.";
+    return false;
+  }
+  if (normalized.lyricsUrl && songLyricsColumnReady !== true) {
+    $("#edit-status").textContent = "가사 링크 저장 설정이 아직 필요합니다. Supabase 가사 링크 SQL을 먼저 실행해주세요.";
     return false;
   }
 
@@ -1930,6 +1973,9 @@ async function addCustomSongs(newSongs) {
   if (normalized.some((song) => song.tags.length) && songTagsColumnReady !== true) {
     throw new Error("태그 저장 설정이 아직 필요합니다. Supabase 태그 SQL을 먼저 실행해주세요.");
   }
+  if (normalized.some((song) => song.lyricsUrl) && songLyricsColumnReady !== true) {
+    throw new Error("가사 링크 저장 설정이 아직 필요합니다. Supabase 가사 링크 SQL을 먼저 실행해주세요.");
+  }
 
   const { error } = await authDb
     .from("song_changes")
@@ -1953,6 +1999,7 @@ function songFromForm(form) {
     coverUrl: data.get("coverUrl"),
     instUrl: data.get("instUrl"),
     jeongwaClipUrl: data.get("jeongwaClipUrl"),
+    lyricsUrl: data.get("lyricsUrl"),
     skillLevel: data.get("skillLevel"),
     tags: data.get("tags"),
     memo: data.get("memo"),
@@ -1966,12 +2013,60 @@ function splitBulkLine(line) {
 
 function isBulkHeader(cols) {
   const joined = cols.map(normalize).join(" ");
-  return joined.includes("분류") && (joined.includes("노래 제목") || joined.includes("제목"));
+  return joined.includes("노래 제목") || joined.includes("제목");
 }
 
-function songFromBulkLine(line, fallbackCategory, headerHasTags = null) {
+function bulkColumnKey(value) {
+  const key = normalize(value).replace(/\s+/g, "");
+  const aliases = {
+    분류: "category",
+    카테고리: "category",
+    category: "category",
+    노래제목: "title",
+    곡명: "title",
+    제목: "title",
+    title: "title",
+    아티스트: "artist",
+    가수: "artist",
+    artist: "artist",
+    커버이미지url: "coverUrl",
+    커버url: "coverUrl",
+    커버: "coverUrl",
+    cover: "coverUrl",
+    inst: "instUrl",
+    정와클립: "jeongwaClipUrl",
+    클립: "jeongwaClipUrl",
+    가사링크: "lyricsUrl",
+    가사url: "lyricsUrl",
+    가사: "lyricsUrl",
+    lyrics: "lyricsUrl",
+    숙련도: "skillLevel",
+    태그: "tags",
+    메모: "memo",
+    비고: "memo",
+  };
+  return aliases[key] || "";
+}
+
+function songFromBulkLine(line, fallbackCategory, headerKeys = null) {
   const cols = splitBulkLine(line).map(clean);
   if (cols.length < 2 || isBulkHeader(cols)) return null;
+
+  if (headerKeys) {
+    const values = Object.fromEntries(headerKeys.map((key, index) => [key, cols[index] || ""]));
+    return {
+      category: categories.includes(values.category) ? values.category : fallbackCategory,
+      title: values.title,
+      artist: values.artist,
+      coverUrl: values.coverUrl,
+      instUrl: values.instUrl,
+      jeongwaClipUrl: values.jeongwaClipUrl,
+      lyricsUrl: values.lyricsUrl,
+      skillLevel: values.skillLevel,
+      tags: values.tags,
+      memo: values.memo,
+    };
+  }
 
   const hasCategory = categories.includes(cols[0]);
   const offset = hasCategory ? 1 : 0;
@@ -1987,6 +2082,7 @@ function songFromBulkLine(line, fallbackCategory, headerHasTags = null) {
     coverUrl: hasCoverColumn ? cols[offset + 2] : "",
     instUrl: cols[offset + 2 + mediaOffset],
     jeongwaClipUrl: cols[offset + 3 + mediaOffset],
+    lyricsUrl: "",
     skillLevel: cols[offset + 4 + mediaOffset],
     tags: hasTagsColumn ? cols[tagIndex] : "",
     memo: cols.slice(tagIndex + (hasTagsColumn ? 1 : 0)).join(" "),
@@ -2000,12 +2096,10 @@ function parseBulkSongs(text, fallbackCategory) {
   const header = lines
     .map((line) => splitBulkLine(line).map(clean))
     .find((cols) => isBulkHeader(cols));
-  const headerHasTags = header
-    ? header.some((column) => normalize(column) === "태그")
-    : null;
+  const headerKeys = header ? header.map(bulkColumnKey) : null;
 
   return lines
-    .map((line) => songFromBulkLine(line, fallbackCategory, headerHasTags))
+    .map((line) => songFromBulkLine(line, fallbackCategory, headerKeys))
     .filter((song) => song && clean(song.title));
 }
 
