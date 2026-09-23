@@ -234,6 +234,25 @@ function normalizeUrl(value) {
   }
 }
 
+function itunesArtwork(value, size) {
+  const normalizedUrl = normalizeUrl(value);
+  const artworkSize = Number.parseInt(size, 10);
+  if (!normalizedUrl || !Number.isFinite(artworkSize) || artworkSize <= 0) return normalizedUrl;
+
+  const url = new URL(normalizedUrl);
+  if (!/(^|\.)mzstatic\.com$/i.test(url.hostname)) return normalizedUrl;
+
+  const replacement = `${artworkSize}x${artworkSize}bb`;
+  const pathname = url.pathname.replace(
+    /\/\d+x\d+b[bf](?:-[^/.]+)?(?=(\.(?:jpe?g|png|webp|avif)$)|\/)/i,
+    (match, fileExtension) => `/${replacement}${fileExtension && artworkSize <= 128 ? "-50" : ""}`,
+  );
+  if (pathname === url.pathname) return normalizedUrl;
+
+  url.pathname = pathname;
+  return url.href;
+}
+
 function normalizeSkill(value) {
   const number = Number.parseInt(clean(value).replace(/[^\d]/g, ""), 10);
   if (!Number.isFinite(number)) return 0;
@@ -519,7 +538,7 @@ function memoText(song) {
 }
 
 function coverMarkup(song, variant = "thumb") {
-  const url = clean(song.coverUrl);
+  const url = itunesArtwork(song.coverUrl, 128);
   const label = `${song.title || "노래"} 앨범 커버`;
   return `
     <span class="song-cover song-cover-${escapeHtml(variant)}${url ? " has-image" : ""}">
@@ -1770,7 +1789,7 @@ function closeRandomModal() {
 function updateCoverPreview(inputId, previewId, value) {
   const input = $(inputId);
   const preview = $(previewId);
-  const url = clean(value ?? input?.value);
+  const url = itunesArtwork(value ?? input?.value, 300);
   if (!preview) return;
 
   preview.innerHTML = url
@@ -2200,12 +2219,6 @@ function bestCoverMatch(song, results) {
   return best.result;
 }
 
-function upscaleItunesArtwork(url) {
-  return clean(url)
-    .replace(/\/\d+x\d+bb\.(jpg|png)$/i, "/600x600bb.$1")
-    .replace(/\/\d+x\d+bb\//i, "/600x600bb/");
-}
-
 function wait(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
@@ -2285,7 +2298,7 @@ async function startCoverFill() {
 
     try {
       const result = bestCoverMatch(song, await itunesSearch(song));
-      const coverUrl = upscaleItunesArtwork(result?.artworkUrl100 || result?.artworkUrl60);
+      const coverUrl = itunesArtwork(result?.artworkUrl100 || result?.artworkUrl60, 128);
       if (result && coverUrl) {
         await persistSongCover(song, coverUrl);
         matched += 1;
