@@ -2498,3 +2498,11 @@ button {
     font-size: 12px;
   }
 }
+
+/* Main songbook / game navigation */
+.site-view-tabs { display:flex; gap:8px; margin:24px 0; border-bottom:1px solid var(--line); padding-bottom:12px; }
+.site-view-tabs button { padding:11px 24px; border:1px solid transparent; border-radius:10px; background:transparent; color:var(--muted); font-weight:750; }
+.site-view-tabs button.active { color:var(--text); background:var(--blue-soft); border-color:var(--blue); }
+.site-view-tabs button:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+#game-frame { display:block; width:100%; height:920px; border:0; }
+@media(max-width:600px) { #game-frame { height:1000px; } }

@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="jeongwa-profile.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260918-sort-lyrics">
+  <link rel="stylesheet" href="styles.css?v=20260925-game">
 </head>
 <body>
   <header class="site-header">
@@ -78,6 +78,13 @@
       <img src="banner.png" alt="JEONG">
     </section>
 
+    <nav class="site-view-tabs" aria-label="메인 메뉴">
+      <button type="button" class="active" data-site-view="songs" aria-pressed="true">♪ 노래책</button>
+      <button type="button" data-site-view="game" aria-pressed="false">◇ GAME</button>
+    </nav>
+    <section id="game-section" aria-label="GAME" hidden>
+      <iframe id="game-frame" title="정와 사다리게임과 핀볼" data-src="games.html?v=20260925-fish-marble-r4" allow="fullscreen" allowfullscreen></iframe>
+    </section>
     <section class="intro">
       <div class="intro-copy">
         <h1><span aria-hidden="true">♪</span> 정와 노래책</h1>
@@ -516,5 +523,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
   <script src="script.js?v=20260918-sort-lyrics"></script>
+  <script src="game-navigation.js?v=20260925-fish-marble-r4"></script>
 </body>
 </html>

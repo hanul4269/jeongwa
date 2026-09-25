@@ -1,0 +1,17 @@
+html, body { margin: 0; overflow: hidden; color-scheme: dark; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+html #settings { background: rgba(23,25,28,.96); border-color: #35404e; box-shadow: 0 18px 42px #0006; }
+html #settings h3, html #settings div.theme { color: #90c7ff; }
+html #settings textarea, html #settings select, html #settings .btn-group > * { background: #20242a; color: #f4f6f8; border-color: #3a4553; }
+html #settings textarea::placeholder { color: #959eab; }
+html #settings textarea:focus { border-color: #90c7ff; box-shadow: 0 0 0 3px #3b79b733; }
+html #settings button, html #settings .btn { background: #242c37; color: #d2e7ff; border-color: #3a4553; box-shadow: none; }
+html #settings #btnStart, html #settings .btn-group > .active, html #settings .btn-toggle-settings { background: #3b79b7; border-color: #3b79b7; color: white; box-shadow: none; }
+html #settings #btnShuffle { background: #24364b; }
+html #settings div.right div.row { border-bottom-color: #ffffff12; }
+html #settings div.right div.row label { color: #b2bdca; }
+html #settings input[type=checkbox]:before { background: #424b58; }
+html #settings input[type=checkbox]:checked:before { background: #3b79b7; }
+html #settings :is(button, select, input):focus-visible { outline: 2px solid #90c7ff; outline-offset: 2px; }
+html div.toast { background: #20242a; color: #f4f6f8; border-color: #3a4553; }
+html div.copyright { color: #a7adb6; font-size: 10px; }
+html div.copyright a { color: #a7adb6; }

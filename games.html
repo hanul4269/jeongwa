@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>정와 GAME</title><link rel="stylesheet" href="games.css?v=20260925-fish-marble-r4"></head>
+<body><main>
+<header class="game-heading"><div><span class="eyebrow">JEONGWA PLAYROOM</span><h1>GAME <span>함께 즐기는 작은 선택</span></h1></div><div class="modes" role="group" aria-label="게임 선택"><button data-mode="ladder" class="active" aria-pressed="true">사다리</button><button data-mode="pinball" aria-pressed="false">핀볼</button></div></header>
+<section id="ladder-panel" aria-label="사다리게임">
+<div class="toolbar"><div><h2>사다리게임</h2><p>이름과 결과를 입력하고, 참가자를 눌러 출발하세요.</p></div><div class="actions"><button id="minus" aria-label="참가자 줄이기">−</button><strong id="count"></strong><button id="plus" aria-label="참가자 늘리기">+</button></div></div>
+<div class="board-scroll"><div id="board"><div id="names" class="slots"></div><svg id="ladder" aria-label="사다리 경로" role="img" preserveAspectRatio="none"></svg><div id="prizes" class="slots"></div></div></div>
+<div class="bottom-tools"><p id="status" role="status">참가자는 2~12명까지 설정할 수 있어요.</p><div class="actions"><button id="shuffle">사다리 섞기</button><button id="reveal">사다리 공개</button><button id="results" class="primary">전체 결과</button></div></div>
+<div id="result-list" class="result-list" aria-live="polite" hidden></div>
+</section>
+<section id="pinball-panel" aria-label="핀볼" hidden><div class="toolbar"><div><h2>핀볼</h2><p>참가자를 입력하고 구슬 레이스를 시작하세요.</p></div><button id="fullscreen">전체화면</button></div><div id="pinball-stage"><iframe id="pinball-frame" title="핀볼 구슬 레이스" data-src="marble-roulette/index.html?v=20260925-fish-marble-r4" allow="fullscreen" allowfullscreen></iframe></div></section>
+</main><script src="games.js?v=20260925-fish-marble-r4"></script></body></html>
