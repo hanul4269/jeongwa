@@ -8,3 +8,11 @@ h1 span { margin-left: 0; }
 @media (max-width: 600px) { main { padding: 8px 16px 20px; } }
 
 html, body { overflow: hidden; }
+
+/* Modal results stay separate from the ladder layout. */
+#results-dialog { width: min(560px, calc(100% - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 24px; border: 1px solid #43536a; border-radius: 16px; background: #1b2027; color: #f4f6f8; box-shadow: 0 24px 80px #0008; overflow-y: auto; }
+#results-dialog::backdrop { background: rgb(0 0 0 / 68%); }
+.results-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+#results-dialog .result-list { padding: 0; grid-template-columns: minmax(0, 1fr); }
+#results-dialog .result-list div { overflow-wrap: anywhere; }
+@media (max-width: 600px) { #results-dialog { padding: 18px; } }

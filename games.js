@@ -26,7 +26,7 @@
         }
         const input = document.createElement('input'); input.value=values[i]; input.maxLength=30;
         input.setAttribute('aria-label',`${i+1}번 ${id==='names'?'참가자':'결과'}`);
-        input.addEventListener('input',()=>{values[i]=input.value; $('result-list').hidden=true;});
+        input.addEventListener('input',()=>{values[i]=input.value; $('results-dialog').close();});
         slot.append(input); $(id).append(slot);
       }
     }
@@ -45,7 +45,7 @@
       }
       points.push([x(col),340]); paths.push(points); mapping.push(col);
     }
-    revealed=false; $('result-list').hidden=true;
+    revealed=false; $('results-dialog').close();
     $('status').textContent='새 사다리를 준비했어요. 참가자 번호를 누르면 출발합니다.';
     draw(); lock(false);
   }
@@ -65,7 +65,7 @@
   }
   async function run(index) {
     if(running||!valid())return;
-    revealed=true;draw();lock(true);$('result-list').hidden=true;
+    revealed=true;draw();lock(true);$('results-dialog').close();
     $('status').textContent=`${names[index]} 님이 내려가는 중…`;
     const path=svg('polyline',{points:paths[index].map(p=>p.join(',')).join(' '),fill:'none',stroke:'#80c0ff','stroke-width':5,'stroke-linejoin':'round'});
     $('ladder').append(path);const length=path.getTotalLength();
@@ -80,8 +80,13 @@
   $('results').onclick=()=>{
     if(!valid())return;revealed=true;draw();$('result-list').replaceChildren();
     mapping.forEach((target,index)=>{const row=document.createElement('div');row.textContent=`${names[index]} → ${prizes[target]}`;$('result-list').append(row);});
-    $('result-list').hidden=false;$('status').textContent='전체 결과를 공개했어요.';
+    $('results-dialog').showModal();$('status').textContent='전체 결과를 공개했어요.';
   };
+  $('close-results').onclick=()=>$('results-dialog').close();
+  $('results-dialog').addEventListener('click',event=>{
+    const rect=$('results-dialog').getBoundingClientRect();
+    if(event.target===$('results-dialog')&&(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)) $('results-dialog').close();
+  });
   document.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{
     const pinball=button.dataset.mode==='pinball';
     $('ladder-panel').hidden=pinball;$('pinball-panel').hidden=!pinball;
