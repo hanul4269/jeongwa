@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline/promises');
+const { createHash } = require('crypto');
 
 const NOTES_PATH = path.resolve(__dirname, '..', 'patch-notes.json');
 
@@ -107,9 +108,13 @@ async function main() {
 
     if (!note) data.notes.unshift(target);
     data.updatedAt = data.notes[0]?.date || options.date;
-    writePatchNotes(data);
-
     const addedCount = target.items.length - beforeCount;
+    if (addedCount > 0) {
+        // 표시 날짜와 별도로 내용을 식별해 같은 날짜의 추가 변경도 알린다.
+        data.revision = createHash('sha256').update(JSON.stringify(data.notes)).digest('hex');
+        writePatchNotes(data);
+    }
+
     const action = note ? '업데이트' : '추가';
     console.log(`패치노트 ${action}: ${options.date} [${options.tag}]`);
     console.log(`추가된 항목: ${addedCount}개`);

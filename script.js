@@ -101,6 +101,15 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
+function initialSearchText(value) {
+  const initials = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+  return normalize(value)
+    .replace(/[가-힣]/g, (character) => initials[Math.floor((character.charCodeAt(0) - 0xac00) / 588)])
+    // NFKC는 입력한 ㄱ 같은 호환 자모를 ᄀ 같은 초성 자모로 바꾼다.
+    .replace(/[\u1100-\u1112]/g, (character) => initials[character.charCodeAt(0) - 0x1100])
+    .replace(/\s+/g, "");
+}
+
 function normalizeEmail(value) {
   return clean(value).toLowerCase();
 }
@@ -683,7 +692,10 @@ function matchesQuery(song, query) {
     song.category,
     normalizeTags(song.tags).join(" "),
   ].join(" "));
-  return haystack.includes(query);
+  if (haystack.includes(query)) return true;
+  if (!/^[\u1100-\u1112\s]+$/.test(query)) return false;
+  const initials = initialSearchText(query);
+  return [song.title, song.artist].some((value) => initialSearchText(value).includes(initials));
 }
 
 function filteredSongs() {
@@ -924,12 +936,13 @@ function loadPatchNotes() {
         return {
           rangeLabel: data.rangeLabel || "최근 주요 변경점",
           updatedAt: data.updatedAt || notes[0]?.date || "",
+          revision: String(data.revision || data.updatedAt || notes[0]?.date || ""),
           notes,
         };
       })
-      .catch((error) => {
+      .finally(() => {
+        // 완료된 응답은 재사용하지 않고, 동시에 진행 중인 요청만 공유한다.
         patchNotesPromise = null;
-        throw error;
       });
   }
   return patchNotesPromise;
@@ -956,7 +969,7 @@ async function refreshPatchNewDot() {
   if (!dot) return;
   try {
     const data = await loadPatchNotes();
-    dot.hidden = !data.updatedAt || data.updatedAt === readPatchSeen();
+    dot.hidden = !data.revision || data.revision === readPatchSeen();
   } catch (error) {
     dot.hidden = true;
   }
@@ -983,11 +996,13 @@ function renderPatchNotes(data) {
 async function openPatchNotesModal() {
   openModal("#patch-notes-modal");
   const board = $("#patch-notes-board");
+  $("#patch-notes-meta").textContent = "";
   board.innerHTML = '<div class="patch-note-status">패치노트를 불러오는 중...</div>';
   try {
     const data = await loadPatchNotes();
     renderPatchNotes(data);
-    if (data.updatedAt) writePatchSeen(data.updatedAt);
+    if ($("#patch-notes-modal").hidden) return;
+    if (data.revision) writePatchSeen(data.revision);
     $("#patch-new-dot").hidden = true;
   } catch (error) {
     console.error("patchNotes:", error);
@@ -2429,7 +2444,11 @@ function bindEvents() {
     const button = event.target.closest("[data-view-mode]");
     if (!button) return;
     state.viewMode = button.dataset.viewMode === "album" ? "album" : "list";
-    localStorage.setItem(viewModeStorageKey, state.viewMode);
+    try {
+      localStorage.setItem(viewModeStorageKey, state.viewMode);
+    } catch (error) {
+      /* 저장소를 쓸 수 없어도 보기 전환은 정상 동작한다. */
+    }
     render();
   });
 
@@ -2703,6 +2722,17 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     const modal = visibleModal();
+    const search = $("#song-search");
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+      && !event.isComposing && (event.code === "KeyK" || event.key.toLowerCase() === "k")
+      && !modal && search.getClientRects().length) {
+      event.preventDefault();
+      setAuthMenu(false);
+      setFabMenu(false);
+      search.focus();
+      search.select();
+      return;
+    }
     if (event.key === "Tab" && modal) {
       const focusable = focusableModalElements(modal);
       if (!focusable.length) {

@@ -23,6 +23,19 @@ do
 
     case "$remote_ref" in
         refs/heads/main)
+            # 기존 원격 커밋과 비교할 수 있을 때만 데이터 전용 갱신을 면제한다.
+            # 새 브랜치나 원격 객체가 없는 경우에는 패치노트 검사를 유지한다.
+            if git cat-file -e "$remote_sha^{commit}" 2>/dev/null
+            then
+                if changed_files=$(git diff --no-renames --name-status "$remote_sha" "$local_sha" --)
+                then
+                    if [ "$changed_files" = "$(printf 'M\tsongs-data.js')" ]
+                    then
+                        echo "pre-push: 곡 데이터만 변경되어 패치노트 확인을 생략합니다." >&2
+                        continue
+                    fi
+                fi
+            fi
             if ! "$NODE_BIN" scripts/check-patch-note.js --ref "$local_sha"
             then
                 echo "pre-push: patch-notes.json에 오늘 패치노트가 없어 main 푸시를 중단합니다." >&2

@@ -148,7 +148,7 @@
           </button>
           <label class="search-box">
             <span class="search-glyph" aria-hidden="true"></span>
-            <input id="song-search" type="search" autocomplete="off" placeholder="제목, 아티스트, 태그, 메모 검색">
+            <input id="song-search" type="search" autocomplete="off" placeholder="제목, 아티스트, 태그, 메모 · 초성 검색" aria-label="곡 검색 (제목, 아티스트, 태그, 메모, 제목·아티스트 초성)" aria-keyshortcuts="Control+K Meta+K" title="검색창 이동: Ctrl+K / ⌘K">
             <button id="clear-search" type="button" aria-label="검색어 지우기">×</button>
           </label>
           <div class="view-toggle" id="view-toggle" role="group" aria-label="곡 보기 방식">
@@ -218,7 +218,7 @@
         <h3>곡 찾기와 보기</h3>
         <ol class="guide-steps">
           <li><strong>분류 탭</strong><span>전체, K-POP, J-POP, POP/OST, 숙제곡을 골라 볼 수 있습니다.</span></li>
-          <li><strong>검색과 태그</strong><span>제목, 아티스트, 태그, 메모로 검색하고 여러 태그를 함께 선택할 수 있습니다.</span></li>
+          <li><strong>검색과 태그</strong><span>제목, 아티스트, 태그, 메모로 검색하고 여러 태그를 함께 선택할 수 있습니다. 제목·아티스트는 초성으로도 찾을 수 있습니다(예: ㅇㅇㅇ → 아이유). 노래책 화면에서 Ctrl+K 또는 ⌘K를 누르면 검색창으로 이동합니다.</span></li>
           <li><strong>보기 방식</strong><span>목록 아이콘과 앨범 아이콘으로 리스트형·앨범형을 전환합니다.</span></li>
           <li><strong>랜덤뽑기</strong><span>현재 검색 결과 또는 전체 곡 중에서 한 곡을 무작위로 뽑습니다.</span></li>
         </ol>
@@ -564,7 +564,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
-  <script src="script.js?v=20260930-patchnotes"></script>
+  <script src="script.js?v=20260930-search1"></script>
   <script src="game-navigation.js?v=20260925-fish-marble-r4"></script>
 </body>
 </html>
