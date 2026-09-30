@@ -4,13 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101319">
-  <meta name="description" content="정와 노래책 검색과 랜덤뽑기">
+  <meta name="description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
   <title>정와 노래책</title>
+  <link rel="canonical" href="https://jeongwa.com/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="정와 노래책">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:title" content="정와 노래책">
+  <meta property="og:description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
+  <meta property="og:url" content="https://jeongwa.com/">
+  <meta property="og:image" content="https://jeongwa.com/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="정와 노래책 - 노래 검색과 랜덤뽑기">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="정와 노래책">
+  <meta name="twitter:description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
+  <meta name="twitter:image" content="https://jeongwa.com/og-image.jpg">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "정와 노래책",
+    "alternateName": "JEONGWA Songbook",
+    "url": "https://jeongwa.com/",
+    "inLanguage": "ko-KR",
+    "description": "정와(정와짱)의 노래책 검색과 랜덤뽑기 사이트"
+  }
+  </script>
   <link rel="icon" type="image/png" href="jeongwa-profile.png">
   <link rel="apple-touch-icon" href="jeongwa-profile.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260925-game">
+  <link rel="stylesheet" href="styles.css?v=20260930-patchnotes2">
 </head>
 <body>
   <header class="site-header">
@@ -55,6 +83,10 @@
             <path d="M12 7h3.5A2.2 2.2 0 1 0 13.9 3.3C12.8 4.3 12 7 12 7z"></path>
           </svg>
         </a>
+        <button class="header-link patch-header-btn" id="open-patch-notes" type="button" aria-label="패치노트 열기" title="패치노트">
+          <i class="header-lucide-icon" data-lucide="scroll-text" aria-hidden="true"></i>
+          <span class="patch-new-dot" id="patch-new-dot" aria-hidden="true" hidden></span>
+        </button>
         <button class="header-link guide-header-btn" id="open-guide" type="button" aria-label="사용 가이드 열기" title="사용 가이드">
           <i class="header-lucide-icon" data-lucide="circle-help" aria-hidden="true"></i>
         </button>
@@ -209,6 +241,16 @@
           <li><strong>편집설정</strong><span>로그인 메뉴에서 편집자 관리와 UP 이벤트를 설정합니다.</span></li>
         </ol>
       </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="patch-notes-modal" hidden>
+    <section class="form-modal patch-notes-modal" role="dialog" aria-modal="true" aria-labelledby="patch-notes-title">
+      <button class="modal-close" id="close-patch-notes" type="button" aria-label="닫기">×</button>
+      <div class="modal-kicker">업데이트</div>
+      <h2 id="patch-notes-title">패치노트</h2>
+      <p class="patch-notes-meta" id="patch-notes-meta"></p>
+      <div class="patch-note-board" id="patch-notes-board" aria-live="polite"></div>
     </section>
   </div>
 
@@ -522,7 +564,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
-  <script src="script.js?v=20260918-sort-lyrics"></script>
+  <script src="script.js?v=20260930-patchnotes"></script>
   <script src="game-navigation.js?v=20260925-fish-marble-r4"></script>
 </body>
 </html>

@@ -901,6 +901,104 @@ function closeModal(id) {
   if (returnTarget?.isConnected) returnTarget.focus();
 }
 
+let patchNotesPromise = null;
+const PATCH_SEEN_KEY = "jeongwa-patch-notes-seen";
+
+function loadPatchNotes() {
+  if (!patchNotesPromise) {
+    patchNotesPromise = fetch("patch-notes.json", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`패치노트 로드 실패 (${response.status})`);
+        return response.json();
+      })
+      .then((data) => {
+        if (!data || !Array.isArray(data.notes)) throw new Error("patch-notes.json 형식이 올바르지 않습니다.");
+        const notes = data.notes
+          .filter((note) => note && note.date && note.tag && Array.isArray(note.items))
+          .map((note) => ({
+            date: String(note.date),
+            tag: String(note.tag),
+            items: note.items.filter(Boolean).map(String),
+          }))
+          .filter((note) => note.items.length);
+        return {
+          rangeLabel: data.rangeLabel || "최근 주요 변경점",
+          updatedAt: data.updatedAt || notes[0]?.date || "",
+          notes,
+        };
+      })
+      .catch((error) => {
+        patchNotesPromise = null;
+        throw error;
+      });
+  }
+  return patchNotesPromise;
+}
+
+function readPatchSeen() {
+  try {
+    return localStorage.getItem(PATCH_SEEN_KEY) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function writePatchSeen(value) {
+  try {
+    localStorage.setItem(PATCH_SEEN_KEY, value);
+  } catch (error) {
+    /* 저장소를 쓸 수 없어도 패치노트는 정상 동작한다. */
+  }
+}
+
+async function refreshPatchNewDot() {
+  const dot = $("#patch-new-dot");
+  if (!dot) return;
+  try {
+    const data = await loadPatchNotes();
+    dot.hidden = !data.updatedAt || data.updatedAt === readPatchSeen();
+  } catch (error) {
+    dot.hidden = true;
+  }
+}
+
+function renderPatchNotes(data) {
+  const basis = data.updatedAt ? `기준: ${data.updatedAt}` : "";
+  $("#patch-notes-meta").innerHTML = `<span>${escapeHtml(data.rangeLabel)}</span><span>${escapeHtml(basis)}</span>`;
+  $("#patch-notes-board").innerHTML = data.notes.length
+    ? data.notes.map((note) => `
+        <article class="patch-note-day">
+          <div class="patch-note-head">
+            <span class="patch-note-date">${escapeHtml(note.date)}</span>
+            <span class="patch-note-tag">${escapeHtml(note.tag)}</span>
+          </div>
+          <ul class="patch-note-list">
+            ${note.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </article>
+      `).join("")
+    : '<div class="patch-note-status">등록된 패치노트가 없습니다.</div>';
+}
+
+async function openPatchNotesModal() {
+  openModal("#patch-notes-modal");
+  const board = $("#patch-notes-board");
+  board.innerHTML = '<div class="patch-note-status">패치노트를 불러오는 중...</div>';
+  try {
+    const data = await loadPatchNotes();
+    renderPatchNotes(data);
+    if (data.updatedAt) writePatchSeen(data.updatedAt);
+    $("#patch-new-dot").hidden = true;
+  } catch (error) {
+    console.error("patchNotes:", error);
+    board.innerHTML = '<div class="patch-note-status">패치노트를 불러오지 못했습니다.</div>';
+  }
+}
+
+function closePatchNotesModal() {
+  closeModal("#patch-notes-modal");
+}
+
 function openGuideModal() {
   openModal("#guide-modal");
 }
@@ -2408,6 +2506,8 @@ function bindEvents() {
   $("#google-login-button").addEventListener("click", signInWithGoogle);
   $("#close-login").addEventListener("click", closeLoginModal);
   $("#close-admin").addEventListener("click", closeAdminModal);
+  $("#open-patch-notes").addEventListener("click", openPatchNotesModal);
+  $("#close-patch-notes").addEventListener("click", closePatchNotesModal);
   $("#open-guide").addEventListener("click", openGuideModal);
   $("#close-guide").addEventListener("click", closeGuideModal);
   $("#open-random").addEventListener("click", openRandomModal);
@@ -2461,6 +2561,9 @@ function bindEvents() {
   $("#draw-random").addEventListener("click", drawRandom);
   $("#random-modal").addEventListener("click", (event) => {
     if (event.target.id === "random-modal") closeRandomModal();
+  });
+  $("#patch-notes-modal").addEventListener("click", (event) => {
+    if (event.target.id === "patch-notes-modal") closePatchNotesModal();
   });
   $("#guide-modal").addEventListener("click", (event) => {
     if (event.target.id === "guide-modal") closeGuideModal();
@@ -2624,6 +2727,7 @@ function bindEvents() {
     if (event.key === "Escape") {
       setAuthMenu(false);
       setFabMenu(false);
+      if (!$("#patch-notes-modal").hidden) closePatchNotesModal();
       if (!$("#guide-modal").hidden) closeGuideModal();
       if (!$("#login-modal").hidden) closeLoginModal();
       if (!$("#admin-modal").hidden) closeAdminModal();
@@ -2644,4 +2748,5 @@ updateAuthUi();
 render();
 window.lucide?.createIcons();
 initLiveStatus();
+refreshPatchNewDot();
 refreshSharedSongData().finally(initAuth);

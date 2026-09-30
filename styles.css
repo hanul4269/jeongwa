@@ -879,6 +879,7 @@ button {
 .song-title-cell {
   display: grid;
   gap: 8px;
+  overflow-wrap: anywhere;
 }
 
 .song-reactions {
@@ -1014,11 +1015,13 @@ button {
   margin: 7px 0 4px;
   font-size: 17px;
   font-weight: 900;
+  overflow-wrap: anywhere;
 }
 
 .song-card-artist {
   color: var(--muted);
   font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 .song-card-meta,
@@ -2506,3 +2509,121 @@ button {
 .site-view-tabs button:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
 #game-frame { display:block; width:100%; height:920px; border:0; }
 @media(max-width:600px) { #game-frame { height:1000px; } }
+
+/* 320~360px 폭에서 헤더 버튼이 6개가 되어도 한 줄에 들어가도록 줄인다. */
+@media (max-width: 360px) {
+  .site-header {
+    padding-inline: 6px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .header-links {
+    gap: 3px;
+  }
+
+  .header-link {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .header-lucide-icon,
+  .guide-header-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .header-icon-svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .auth-button {
+    padding: 0 7px;
+    font-size: 12px;
+  }
+}
+
+/* 패치노트 */
+.patch-header-btn {
+  position: relative;
+  padding: 0;
+}
+
+.patch-new-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: #ff5c5c;
+}
+
+.form-modal.patch-notes-modal {
+  width: min(640px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+  overflow-y: auto;
+}
+
+.patch-notes-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: -8px 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.patch-note-board {
+  display: grid;
+  gap: 12px;
+}
+
+.patch-note-day {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.patch-note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.patch-note-date {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.patch-note-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--focus);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.patch-note-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.patch-note-status {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
