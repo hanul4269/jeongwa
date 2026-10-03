@@ -2627,3 +2627,43 @@ button {
   color: var(--muted);
   text-align: center;
 }
+
+/* Keep the highlighted comment's current rank visible while browsing. */
+#up-ranking-highlight:has(.up-highlight-summary) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 0;
+  background: var(--surface);
+}
+.up-highlight-summary {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 14px;
+  border: 2px solid #90c7ff;
+  border-radius: 10px;
+  background: #21344a;
+  color: #e6f3ff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.up-highlight-summary strong { font-size: 26px; }
+.up-highlight-label { font-size: 12px; }
+.up-highlight-detail { overflow-wrap: anywhere; }
+.up-highlight-summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.up-highlight-missing { color: var(--muted); }
+.up-rank-item.highlighted { border: 2px solid #90c7ff; background: #21344a; }
+.up-rank-item.highlighted .up-rank-number { color: #cfe7ff; font-size: 23px; }
+@media (max-width: 375px) {
+  .up-rank-item { grid-template-columns: 28px 32px minmax(0, 1fr) auto; gap: 6px; padding: 8px 6px; }
+  .up-rank-profile, .up-rank-profile-fallback { width: 32px; height: 32px; }
+  .up-rank-likes { font-size: 12px; }
+  .up-rank-person strong { font-size: 13px; }
+  .up-highlight-badge { display: block; width: fit-content; margin-left: 0; }
+}
+
+.up-highlight-person { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 12px; }
+.up-highlight-profile { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; }
+.up-highlight-info { display: grid; gap: 5px; min-width: 0; }

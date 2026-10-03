@@ -1487,7 +1487,7 @@ function parseSoopPostUrl(value) {
 
     const match = url.pathname.match(/\/(?:station\/)?([\w-]+)\/post\/(\d+)/i);
     if (!match) return null;
-    const highlightMatch = url.hash.match(/^#comment_noti(\d+)$/i);
+    const highlightMatch = url.hash.match(/^#comment(?:_noti)?(\d+)$/i);
     return {
       bjId: match[1],
       postNo: match[2],
@@ -1625,6 +1625,7 @@ function renderUpRankingTabs() {
 }
 
 function renderUpRankingEvent(event) {
+  $("#up-ranking-highlight").innerHTML = "";
   if (!event) {
     $("#up-ranking-event").innerHTML = "";
     $("#up-ranking-list").innerHTML = '<p class="admin-empty">진행 중인 UP 이벤트가 없습니다.</p>';
@@ -1664,15 +1665,28 @@ function renderUpRankingList(event, ranking, updatedAt) {
   const highlightedReply = parsed?.highlightReplyNo || "";
   const ordered = ranking.map((entry) => ({
     ...entry,
-    highlighted: highlightedReply && String(entry.replyNo) === highlightedReply,
+    highlighted: Boolean(highlightedReply && String(entry.replyNo) === highlightedReply),
   }));
   const highlighted = ordered.find((entry) => entry.highlighted);
-  const displayRows = highlighted
-    ? [highlighted, ...ordered.filter((entry) => !entry.highlighted)]
-    : ordered;
+  $("#up-ranking-highlight").innerHTML = highlighted
+    ? `<button class="up-highlight-summary" type="button" data-up-highlight-jump>
+        <span class="up-highlight-label">하이라이트 댓글 · 순위로 이동 ↓</span>
+        <span class="up-highlight-person">
+          ${highlighted.profileUrl
+            ? `<img class="up-highlight-profile" src="${escapeHtml(highlighted.profileUrl)}" alt="">`
+            : '<span class="up-highlight-profile up-rank-profile-fallback" aria-hidden="true">UP</span>'}
+          <span class="up-highlight-info">
+            <strong>현재 ${highlighted.rank}위</strong>
+            <span class="up-highlight-detail">${escapeHtml(highlighted.name || highlighted.userId || "-")} · ${highlighted.likeCount.toLocaleString("ko-KR")} UP</span>
+          </span>
+        </span>
+      </button>`
+    : highlightedReply
+      ? '<p class="up-highlight-missing" role="status">하이라이트 댓글을 현재 랭킹에서 찾지 못했습니다.</p>'
+      : "";
 
-  $("#up-ranking-list").innerHTML = displayRows.map((entry) => `
-    <a class="up-rank-item${entry.highlighted ? " highlighted" : ""}" href="${escapeHtml(rankingCommentUrl(event, entry.replyNo))}" target="_blank" rel="noopener noreferrer">
+  $("#up-ranking-list").innerHTML = ordered.map((entry) => `
+    <a id="up-rank-${escapeHtml(String(entry.replyNo))}" class="up-rank-item${entry.highlighted ? " highlighted" : ""}" href="${escapeHtml(rankingCommentUrl(event, entry.replyNo))}" target="_blank" rel="noopener noreferrer">
       <span class="up-rank-number">${entry.rank}</span>
       ${entry.profileUrl
         ? `<img class="up-rank-profile" src="${escapeHtml(entry.profileUrl)}" alt="" loading="lazy">`
@@ -2658,6 +2672,12 @@ function bindEvents() {
   $("#open-up-ranking").addEventListener("click", () => openUpRankingModal());
   $("#close-up-ranking").addEventListener("click", closeUpRankingModal);
   $("#refresh-up-ranking").addEventListener("click", () => refreshUpRanking(true));
+  $("#up-ranking-highlight").addEventListener("click", (event) => {
+    if (!event.target.closest("[data-up-highlight-jump]")) return;
+    const target = $("#up-ranking-list .highlighted");
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+    target?.focus({ preventScroll: true });
+  });
   $("#up-ranking-tabs").addEventListener("click", (event) => {
     const button = event.target.closest("[data-up-ranking-event]");
     if (!button) return;
