@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101319">
-  <meta name="description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
-  <title>정와 노래책</title>
+  <meta name="description" content="오늘의 정와, 여기서 만나요. 방송 상태를 확인하고 제목·아티스트·태그·초성으로 듣고 싶은 노래를 찾아보세요.">
+  <title>정와 · 오늘의 정와</title>
   <link rel="canonical" href="https://jeongwa.com/">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="정와 노래책">
+  <meta property="og:site_name" content="정와">
   <meta property="og:locale" content="ko_KR">
-  <meta property="og:title" content="정와 노래책">
-  <meta property="og:description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
+  <meta property="og:title" content="오늘의 정와, 여기서 만나요.">
+  <meta property="og:description" content="오늘의 정와, 여기서 만나요. 방송 상태를 확인하고 제목·아티스트·태그·초성으로 듣고 싶은 노래를 찾아보세요.">
   <meta property="og:url" content="https://jeongwa.com/">
   <meta property="og:image" content="https://jeongwa.com/og-image.jpg">
   <meta property="og:image:type" content="image/jpeg">
@@ -20,36 +20,37 @@
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="정와 노래책 - 노래 검색과 랜덤뽑기">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="정와 노래책">
-  <meta name="twitter:description" content="정와(정와짱)의 노래책. 제목·아티스트·태그로 곡을 검색하고 랜덤뽑기로 신청곡을 골라보세요.">
+  <meta name="twitter:title" content="오늘의 정와, 여기서 만나요.">
+  <meta name="twitter:description" content="오늘의 정와, 여기서 만나요. 방송 상태를 확인하고 제목·아티스트·태그·초성으로 듣고 싶은 노래를 찾아보세요.">
   <meta name="twitter:image" content="https://jeongwa.com/og-image.jpg">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "name": "정와 노래책",
+    "name": "정와",
     "alternateName": "JEONGWA Songbook",
     "url": "https://jeongwa.com/",
     "inLanguage": "ko-KR",
-    "description": "정와(정와짱)의 노래책 검색과 랜덤뽑기 사이트"
+    "description": "정와의 방송과 노래책을 만나는 팬 허브"
   }
   </script>
   <link rel="icon" type="image/png" href="jeongwa-profile.png">
   <link rel="apple-touch-icon" href="jeongwa-profile.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20260930-patchnotes2">
+  <link rel="stylesheet" href="styles.css?v=20261012-home">
+  <link rel="stylesheet" href="home.css?v=20261012-profile">
 </head>
 <body>
   <header class="site-header">
     <div class="brand-area">
-      <a class="brand" href="#top" aria-label="정와 노래책 홈">
-        <span class="brand-mark">♪</span>
-        <span>정와 노래책</span>
+      <a class="brand" href="#home" aria-label="정와 HOME">
+        <span class="brand-mark" aria-hidden="true">♪</span>
+        <span>정와</span>
       </a>
       <a class="live-badge" id="live-badge" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer" aria-label="정와 SOOP 방송국, 현재 방송 상태 확인 중" title="방송 상태 확인 중">
         <span class="live-dot" aria-hidden="true"></span>
-        <span>LIVE</span>
+        <span>확인 중</span>
       </a>
     </div>
     <div class="header-actions">
@@ -83,7 +84,7 @@
             <path d="M12 7h3.5A2.2 2.2 0 1 0 13.9 3.3C12.8 4.3 12 7 12 7z"></path>
           </svg>
         </a>
-        <button class="header-link patch-header-btn" id="open-patch-notes" type="button" aria-label="패치노트 열기" title="패치노트">
+        <button class="header-link patch-header-btn" id="open-patch-notes" type="button" aria-label="사이트 업데이트 열기" title="사이트 업데이트">
           <i class="header-lucide-icon" data-lucide="scroll-text" aria-hidden="true"></i>
           <span class="patch-new-dot" id="patch-new-dot" aria-hidden="true" hidden></span>
         </button>
@@ -105,19 +106,112 @@
     </div>
   </header>
 
-  <main id="top">
-    <section class="banner" aria-label="정와 노래책 배너">
-      <img src="banner.png" alt="JEONG">
+  <main id="top" tabindex="-1">
+    <nav class="site-view-tabs" aria-label="메인 메뉴">
+      <button type="button" class="active" data-site-view="home" aria-pressed="true">HOME</button>
+      <button type="button" data-site-view="songs" aria-pressed="false">노래책</button>
+      <button type="button" data-site-view="game" aria-pressed="false">GAME</button>
+    </nav>
+
+    <section class="banner" aria-label="정와 배너">
+      <img src="banner.png" alt="정와 캐릭터와 JEONGWA 로고" width="2048" height="298" fetchpriority="high">
     </section>
 
-    <nav class="site-view-tabs" aria-label="메인 메뉴">
-      <button type="button" class="active" data-site-view="songs" aria-pressed="true">♪ 노래책</button>
-      <button type="button" data-site-view="game" aria-pressed="false">◇ GAME</button>
-    </nav>
+    <section id="home-section" class="home" aria-labelledby="home-title">
+      <h1 id="home-title" class="visually-hidden">정와 HOME</h1>
+      <div class="home-quick-actions">
+        <section class="home-song-finder" aria-labelledby="home-search-title">
+          <div class="home-search-heading">
+            <div>
+              <p class="home-eyebrow">SONGBOOK</p>
+              <h2 id="home-search-title">오늘 듣고 싶은 노래는?</h2>
+            </div>
+            <p id="home-song-count" class="home-song-count" aria-live="polite">노래책을 불러오는 중</p>
+          </div>
+          <form id="home-song-search-form" class="home-search-form" role="search">
+            <label class="home-search-field" for="home-song-search">
+              <span class="search-glyph" aria-hidden="true"></span>
+              <span class="visually-hidden">노래 제목, 아티스트, 태그, 메모 또는 초성 검색</span>
+              <input id="home-song-search" type="search" placeholder="제목·가수·초성 검색" autocomplete="off" enterkeyhint="search">
+            </label>
+            <button class="home-button home-button-primary" type="submit">노래책에서 찾기 <span aria-hidden="true">→</span></button>
+          </form>
+          <div class="home-search-bottom">
+            <p>태그와 메모도 검색해요. 새 검색은 전체 곡에서 시작해요.</p>
+            <button class="home-text-link" id="home-random" type="button" disabled><span aria-hidden="true">⤨</span> 오늘의 랜덤곡 <span class="home-random-caption">· 전체 곡</span></button>
+          </div>
+        </section>
+
+        <section class="home-broadcast" id="home-broadcast" data-state="loading" aria-labelledby="home-live-title">
+          <div class="home-broadcast-top">
+            <p class="home-eyebrow">ON AIR</p>
+            <span class="home-status" id="home-live-label">확인 중</span>
+            <button id="home-live-refresh" class="home-refresh" type="button" aria-label="방송 상태 다시 확인">↻</button>
+          </div>
+          <a id="home-live-thumbnail" class="home-live-thumbnail" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer" aria-label="정와 LIVE 방송 보러 가기" hidden>
+            <img id="home-live-thumbnail-image" alt="정와 라이브 방송 미리보기" width="640" height="360" decoding="async" referrerpolicy="no-referrer">
+            <span class="home-thumbnail-play" aria-hidden="true">▶</span>
+          </a>
+          <div class="home-broadcast-copy" aria-live="polite" aria-atomic="true">
+            <h2 id="home-live-title">방송 상태를 확인하고 있어요</h2>
+            <p id="home-live-detail">정와의 방송은 SOOP에서 만날 수 있어요.</p>
+            <p id="home-live-title-full" class="home-live-title-full" hidden></p>
+          </div>
+          <a id="home-live-link" class="home-button home-button-channel" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer">SOOP에서 확인 <span aria-hidden="true">↗</span></a>
+        </section>
+      </div>
+
+      <div class="home-info-grid">
+        <aside class="home-notice" aria-labelledby="home-notice-title">
+          <span class="home-notice-icon" aria-hidden="true">i</span>
+          <div>
+            <p class="home-eyebrow">신청 안내</p>
+            <h2 id="home-notice-title">숙제곡 접수는 현재 중단되어 있어요.</h2>
+            <p>밀린 숙제곡이 많아 새 숙제곡은 받지 않아요. 신청 전에 곡별 메모와 기준을 확인해 주세요.</p>
+          </div>
+          <button type="button" class="home-text-link" data-open-song-rules>신청 기준 보기 <span aria-hidden="true">↗</span></button>
+        </aside>
+
+        <section class="home-profile" aria-labelledby="home-profile-title">
+          <picture class="home-profile-avatar">
+            <source media="(prefers-reduced-motion: reduce)" srcset="jeongwa-profile-still.webp">
+            <img src="jeongwa-profile-animated.webp" alt="정와 프로필 이미지" width="320" height="320" loading="lazy" decoding="async">
+          </picture>
+          <div class="home-profile-copy">
+            <p class="home-eyebrow">PROFILE</p>
+            <h2 id="home-profile-title">정와 프로필</h2>
+            <dl class="home-profile-facts">
+              <div><dt>생일</dt><dd><time datetime="1995-02-03">1995년 2월 3일</time></dd></div>
+              <div><dt>MBTI</dt><dd>ISTP</dd></div>
+              <div><dt>팬 애칭</dt><dd>등 푸른 생선</dd></div>
+              <div><dt>SOOP 첫방송</dt><dd><time datetime="2024-04-10">2024년 4월 10일</time></dd></div>
+              <div><dt>팬닉</dt><dd>&gt;D</dd></div>
+            </dl>
+          </div>
+        </section>
+      </div>
+
+      <section class="home-soop-notices" id="home-soop-notices" aria-labelledby="home-soop-notices-title">
+        <div class="home-section-heading">
+          <div>
+            <p class="home-eyebrow">FROM SOOP</p>
+            <h2 id="home-soop-notices-title">정와의 방송 공지</h2>
+          </div>
+          <a id="home-soop-notices-all" class="home-text-link" href="https://ch.sooplive.co.kr/jeongwazzang" target="_blank" rel="noopener noreferrer">전체 보기 <span aria-hidden="true">↗</span></a>
+        </div>
+        <ol id="home-soop-notices-list" class="home-soop-notices-list" aria-label="최근 SOOP 방송 공지"></ol>
+        <div class="home-soop-notices-meta">
+          <p id="home-soop-notices-status" role="status">SOOP 방송 공지를 불러오는 중이에요.</p>
+        </div>
+      </section>
+      <p class="home-bookmark-note">노래책으로 바로 오고 싶다면 <a href="#songs">노래책 주소</a>를 북마크해 주세요.</p>
+    </section>
+
+
     <section id="game-section" aria-label="GAME" hidden>
       <iframe id="game-frame" title="정와 사다리게임과 핀볼" data-src="games.html?v=20260925-results-dialog" allow="fullscreen" allowfullscreen></iframe>
     </section>
-    <section class="intro">
+    <section class="intro" id="song-request-guide" tabindex="-1" hidden>
       <div class="intro-copy">
         <h1><span aria-hidden="true">♪</span> 정와 노래책</h1>
         <ul>
@@ -131,7 +225,7 @@
       </div>
     </section>
 
-    <section class="songbook" aria-labelledby="songbook-title">
+    <section class="songbook" aria-labelledby="songbook-title" hidden>
       <div class="songbook-head">
         <div>
           <h2 id="songbook-title">곡 리스트</h2>
@@ -248,7 +342,7 @@
     <section class="form-modal patch-notes-modal" role="dialog" aria-modal="true" aria-labelledby="patch-notes-title">
       <button class="modal-close" id="close-patch-notes" type="button" aria-label="닫기">×</button>
       <div class="modal-kicker">업데이트</div>
-      <h2 id="patch-notes-title">패치노트</h2>
+      <h2 id="patch-notes-title">사이트 업데이트</h2>
       <p class="patch-notes-meta" id="patch-notes-meta"></p>
       <div class="patch-note-board" id="patch-notes-board" aria-live="polite"></div>
     </section>
@@ -565,7 +659,10 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
-  <script src="script.js?v=20260930-search1"></script>
-  <script src="game-navigation.js?v=20260925-fish-marble-r4"></script>
+  <script src="songbook-session.js?v=20261012-home"></script>
+  <script src="script.js?v=20261012-home"></script>
+  <script src="game-navigation.js?v=20261012-banner"></script>
+  <script src="broadcast-status.js?v=20261012-banner"></script>
+  <script src="soop-notices.js?v=20261012-banner"></script>
 </body>
 </html>

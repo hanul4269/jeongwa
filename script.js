@@ -7,9 +7,7 @@ const SUPABASE_URL = "https://ftdptxblxijbmgkbqnnh.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_3_tpgX3yEvfGrGvFdhRUzA_qQuemlEh";
 const OWNER_EMAIL = "riosniper12@gmail.com";
 const SOOP_PROXY_URL = "https://clever-rhino-36.hanul4269.deno.net";
-const SOOP_CHANNEL_ID = "jeongwazzang";
 const UP_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-const LIVE_REFRESH_INTERVAL_MS = 60 * 1000;
 const ALL_CATEGORY = "전체";
 const categories = ["K-POP", "J-POP", "POP/OST", "숙제곡"];
 const songCollator = new Intl.Collator("ko", {
@@ -61,13 +59,14 @@ let legacyMigrationPromise = null;
 let songCoverColumnReady = null;
 let songTagsColumnReady = null;
 let songLyricsColumnReady = null;
+let sharedSongDataReady = false;
+let initialSongbookDataReady = false;
 let coverFillCancelled = false;
 let coverFillRunning = false;
 let songReactionsReady = null;
 const likeCountsBySong = new Map();
 const myReactionsBySong = new Map();
 const pendingReactionSongs = new Set();
-let liveStatusRefreshTimer = null;
 
 const authDb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
@@ -476,6 +475,7 @@ async function refreshSharedSongData() {
     if (!editedSongsById[id]) editedSongsById[id] = song;
   });
 
+  sharedSongDataReady = true;
   refreshSongs();
   render();
   updateRandomCount();
@@ -839,7 +839,8 @@ function renderSummary(items) {
 
 function render() {
   const availableTags = availableTagCounts();
-  syncSelectedTags(availableTags);
+  // A restored filter can belong to a shared song that has not loaded yet.
+  if (sharedSongDataReady) syncSelectedTags(availableTags);
   renderTabs();
   renderTagFilter(availableTags);
   const items = filteredSongs();
@@ -875,7 +876,40 @@ function render() {
   $("#clear-search").classList.toggle("visible", state.query.trim().length > 0);
   bindCoverImageErrors($(".songbook"));
   window.lucide?.createIcons();
+  window.dispatchEvent(new CustomEvent("jeongwa:songbook-change", {
+    detail: { state: songbookSnapshot(), count: songs.length },
+  }));
 }
+
+function songbookSnapshot() {
+  return { ...state, selectedTags: [...state.selectedTags] };
+}
+
+function applySongbookState(value) {
+  const saved = window.JeongwaSongbookSession.songbook(value);
+  Object.assign(state, saved);
+  $("#song-search").value = state.query;
+  render();
+  updateRandomCount();
+}
+
+// HOME delegates to the existing collection, search, random draw and dialogs.
+window.jeongwaSongbook = {
+  getState: songbookSnapshot,
+  applyState: applySongbookState,
+  count: () => songs.length,
+  isReady: () => initialSongbookDataReady,
+  search(query) {
+    applySongbookState({ ...state, query, category: ALL_CATEGORY, selectedTags: [], favoritesOnly: false });
+  },
+  openRandom() {
+    const all = document.querySelector('input[name="random-scope"][value="all"]');
+    if (all) all.checked = true;
+    openRandomModal();
+  },
+  openGuide: openGuideModal,
+  openUpdates: openPatchNotesModal,
+};
 
 function visibleModal() {
   return [...document.querySelectorAll(".modal-backdrop:not([hidden])")].at(-1) || null;
@@ -997,7 +1031,7 @@ async function openPatchNotesModal() {
   openModal("#patch-notes-modal");
   const board = $("#patch-notes-board");
   $("#patch-notes-meta").textContent = "";
-  board.innerHTML = '<div class="patch-note-status">패치노트를 불러오는 중...</div>';
+  board.innerHTML = '<div class="patch-note-status">사이트 업데이트를 불러오는 중...</div>';
   try {
     const data = await loadPatchNotes();
     renderPatchNotes(data);
@@ -1006,7 +1040,7 @@ async function openPatchNotesModal() {
     $("#patch-new-dot").hidden = true;
   } catch (error) {
     console.error("patchNotes:", error);
-    board.innerHTML = '<div class="patch-note-status">패치노트를 불러오지 못했습니다.</div>';
+    board.innerHTML = '<div class="patch-note-status">사이트 업데이트를 불러오지 못했습니다.</div>';
   }
 }
 
@@ -1020,47 +1054,6 @@ function openGuideModal() {
 
 function closeGuideModal() {
   closeModal("#guide-modal");
-}
-
-function renderLiveStatus(isLive, title = "", unavailable = false) {
-  const badge = $("#live-badge");
-  if (!badge) return;
-
-  badge.classList.toggle("is-live", isLive);
-  const label = isLive
-    ? `정와 SOOP 방송 중${title ? `, ${title}` : ""}`
-    : unavailable
-      ? "정와 SOOP 방송국, 방송 상태를 확인하지 못함"
-      : "정와 SOOP 방송국, 현재 오프라인";
-  badge.setAttribute("aria-label", label);
-  badge.title = isLive ? (title || "정와 방송 보러 가기") : unavailable ? "방송 상태 확인 실패" : "현재 오프라인";
-}
-
-async function refreshLiveStatus() {
-  const target = `https://chapi.sooplive.co.kr/api/${encodeURIComponent(SOOP_CHANNEL_ID)}/station`;
-  try {
-    const response = await fetch(`${SOOP_PROXY_URL}?url=${encodeURIComponent(target)}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(6000),
-    });
-    if (!response.ok) throw new Error(`SOOP 응답 오류 (${response.status})`);
-
-    const payload = await response.json();
-    const broadcast = payload?.broad;
-    renderLiveStatus(Boolean(broadcast?.broad_no), clean(broadcast?.broad_title || broadcast?.title));
-  } catch (error) {
-    console.warn("SOOP LIVE 상태를 확인하지 못했습니다.", error.message);
-    renderLiveStatus(false, "", true);
-  }
-}
-
-function initLiveStatus() {
-  refreshLiveStatus();
-  window.clearInterval(liveStatusRefreshTimer);
-  liveStatusRefreshTimer = window.setInterval(refreshLiveStatus, LIVE_REFRESH_INTERVAL_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshLiveStatus();
-  });
 }
 
 function setAuthMenu(open) {
@@ -1100,16 +1093,24 @@ async function signInWithGoogle() {
 
   status.textContent = "Google 로그인 페이지로 이동하는 중입니다.";
   button.disabled = true;
-  const { data, error } = await authDb.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: authRedirectTo(),
-      skipBrowserRedirect: true,
-      queryParams: { prompt: "select_account" },
-    },
-  });
+  window.jeongwaNavigation?.prepareLogin();
+  let data;
+  let error;
+  try {
+    ({ data, error } = await authDb.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: authRedirectTo(),
+        skipBrowserRedirect: true,
+        queryParams: { prompt: "select_account" },
+      },
+    }));
+  } catch (failure) {
+    error = failure;
+  }
 
   if (error) {
+    window.jeongwaNavigation?.cancelLogin();
     status.textContent = `로그인 준비에 실패했습니다: ${error.message}`;
     button.disabled = false;
     return;
@@ -1121,6 +1122,7 @@ async function signInWithGoogle() {
   }
 
   status.textContent = "로그인 주소를 만들지 못했습니다. 잠시 후 다시 시도해주세요.";
+  window.jeongwaNavigation?.cancelLogin();
   button.disabled = false;
 }
 
@@ -1284,27 +1286,36 @@ async function initAuth() {
   const currentUrl = new URL(window.location.href);
   const authError = currentUrl.searchParams.get("error_description") || currentUrl.searchParams.get("error");
   if (authError) {
+    window.jeongwaNavigation?.finishLogin(false);
     currentUrl.searchParams.delete("error");
     currentUrl.searchParams.delete("error_code");
     currentUrl.searchParams.delete("error_description");
-    history.replaceState({}, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
+    history.replaceState(history.state, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
     openLoginModal();
     $("#login-status").textContent = `로그인에 실패했습니다: ${authError}`;
   }
 
   const authCode = currentUrl.searchParams.get("code");
   if (authCode) {
-    const { data, error } = await authDb.auth.exchangeCodeForSession(authCode);
+    let data;
+    let error;
+    try {
+      ({ data, error } = await authDb.auth.exchangeCodeForSession(authCode));
+    } catch (failure) {
+      error = failure;
+    }
     currentUrl.searchParams.delete("code");
     currentUrl.searchParams.delete("state");
-    history.replaceState({}, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
+    history.replaceState(history.state, document.title, currentUrl.pathname + currentUrl.search + currentUrl.hash);
 
-    if (error) {
+    if (error || !data?.session) {
+      window.jeongwaNavigation?.finishLogin(false);
       openLoginModal();
-      $("#login-status").textContent = `로그인 처리에 실패했습니다: ${error.message}`;
+      $("#login-status").textContent = `로그인 처리에 실패했습니다: ${error?.message || "로그인 세션을 확인하지 못했습니다."}`;
     } else {
       await applyAuthSession(data.session);
       closeLoginModal();
+      window.jeongwaNavigation?.finishLogin(true);
       return;
     }
   }
@@ -2797,6 +2808,20 @@ bindRatingPickers();
 updateAuthUi();
 render();
 window.lucide?.createIcons();
-initLiveStatus();
-refreshPatchNewDot();
-refreshSharedSongData().finally(initAuth);
+// The router is loaded by the next script. Even immediately cached responses
+// must not finish OAuth before that router can consume the saved return state.
+async function startRemoteData() {
+  refreshPatchNewDot();
+  try {
+    await refreshSharedSongData();
+    await initAuth();
+  } finally {
+    initialSongbookDataReady = true;
+    window.dispatchEvent(new CustomEvent("jeongwa:songbook-ready"));
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startRemoteData, { once: true });
+} else {
+  startRemoteData();
+}
