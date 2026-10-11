@@ -39,7 +39,7 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20261012-home">
-  <link rel="stylesheet" href="home.css?v=20261012-profile">
+  <link rel="stylesheet" href="home.css?v=20261012-menu-below-banner">
 </head>
 <body>
   <header class="site-header">
@@ -107,15 +107,15 @@
   </header>
 
   <main id="top" tabindex="-1">
+    <section class="banner" aria-label="정와 배너">
+      <img src="banner.png" alt="정와 캐릭터와 JEONGWA 로고" width="2048" height="298" fetchpriority="high">
+    </section>
+
     <nav class="site-view-tabs" aria-label="메인 메뉴">
       <button type="button" class="active" data-site-view="home" aria-pressed="true">HOME</button>
       <button type="button" data-site-view="songs" aria-pressed="false">노래책</button>
       <button type="button" data-site-view="game" aria-pressed="false">GAME</button>
     </nav>
-
-    <section class="banner" aria-label="정와 배너">
-      <img src="banner.png" alt="정와 캐릭터와 JEONGWA 로고" width="2048" height="298" fetchpriority="high">
-    </section>
 
     <section id="home-section" class="home" aria-labelledby="home-title">
       <h1 id="home-title" class="visually-hidden">정와 HOME</h1>

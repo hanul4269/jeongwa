@@ -10,7 +10,7 @@
 .auth-button { min-height: 44px; }
 .live-badge { min-height: 30px; }
 .live-badge.is-live .live-dot { animation: none; }
-.site-view-tabs { width: min(1180px, calc(100% - 40px)); margin: 0 auto 24px; padding: 12px 0 0; gap: 28px; border-bottom-color: var(--line-strong); }
+.site-view-tabs { width: min(1180px, calc(100% - 40px)); margin: 0 auto; padding: 12px 0 0; gap: 28px; border-bottom-color: var(--line-strong); }
 .site-view-tabs button { position: relative; min-height: 52px; padding: 10px 4px 16px; border: 0; border-radius: 0; font-size: 14px; letter-spacing: .015em; }
 .site-view-tabs button.active { color: #a9d5ff; background: none; }
 .site-view-tabs button.active::after { content: ''; height: 3px; background: #86c2ff; position: absolute; bottom: -1px; left: 0; right: 0; border-radius: 2px; }
@@ -94,7 +94,7 @@
   .header-links { gap: 2px; }
   .header-actions { gap: 8px; }
   .site-view-tabs, .home { width: calc(100% - 28px); }
-  .site-view-tabs { padding-top: 2px; margin-bottom: 16px; }
+  .site-view-tabs { padding-top: 2px; }
   .site-view-tabs button { min-height: 48px; padding-bottom: 10px; }
   .home-button { font-size: 12px; padding-inline: 14px; gap: 13px; }
   .home-broadcast { padding: 16px 18px; border-radius: 13px; display: grid; grid-template-columns: minmax(0,1fr) auto; column-gap: 12px; }
