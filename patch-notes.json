@@ -1,8 +1,15 @@
 {
   "schemaVersion": 1,
   "rangeLabel": "최근 주요 변경점",
-  "updatedAt": "2026.10.12",
+  "updatedAt": "2026.10.18",
   "notes": [
+    {
+      "date": "2026.10.18",
+      "tag": "개선",
+      "items": [
+        "HOME 프로필의 생일을 월·일만 표시하도록 정리했어요."
+      ]
+    },
     {
       "date": "2026.10.12",
       "tag": "개선",
@@ -102,5 +109,5 @@
       ]
     }
   ],
-  "revision": "22d7be35943797deb4259a28b80ee5985d7c8b798b2e7605de2f945fb016469f"
+  "revision": "5aa5efbf26da75c8b5814cb6a451f2ebddd01b95593646119b618a8272930464"
 }
