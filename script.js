@@ -142,6 +142,13 @@ function canEdit() {
   return isSignedIn() && isEditorEmail(authUser.email);
 }
 
+// Calendar uses the existing authenticated client and editor permissions.
+window.jeongwaCalendarAccess = Object.freeze({
+  canEdit,
+  fromEvents: () => authDb.from("calendar_events"),
+  rpc: (name, params) => authDb.rpc(name, params),
+});
+
 function canManageEditors() {
   return isSignedIn() && normalizeEmail(authUser.email) === normalizeEmail(ownerEmail);
 }
@@ -1345,6 +1352,7 @@ function updateAuthUi() {
   if (!signedIn) {
     setAuthMenu(false);
   }
+  window.dispatchEvent(new CustomEvent("jeongwa:auth-change", { detail: { canEdit: editable } }));
 }
 
 function ensureEditMode() {

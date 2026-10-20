@@ -39,7 +39,8 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20261012-home">
-  <link rel="stylesheet" href="home.css?v=20261012-menu-below-banner">
+  <link rel="stylesheet" href="home.css?v=20261020-schedule">
+  <link rel="stylesheet" href="calendar.css?v=20261020-details">
 </head>
 <body>
   <header class="site-header">
@@ -113,6 +114,7 @@
 
     <nav class="site-view-tabs" aria-label="메인 메뉴">
       <button type="button" class="active" data-site-view="home" aria-pressed="true">HOME</button>
+      <button type="button" data-site-view="calendar" aria-pressed="false">캘린더</button>
       <button type="button" data-site-view="songs" aria-pressed="false">노래책</button>
       <button type="button" data-site-view="game" aria-pressed="false">GAME</button>
     </nav>
@@ -161,6 +163,24 @@
         </section>
       </div>
 
+      <section id="home-schedule" class="home-schedule" aria-labelledby="home-schedule-title">
+        <div class="home-section-heading">
+          <h2 id="home-schedule-title">오늘과 다음 일정</h2>
+          <a id="home-schedule-calendar" class="home-text-link" href="#calendar">캘린더 <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="home-schedule-grid">
+          <section class="home-schedule-column" aria-labelledby="home-schedule-today-heading">
+            <h3 id="home-schedule-today-heading">오늘 <time id="home-schedule-today-date"></time></h3>
+            <ul id="home-schedule-today-list" class="home-schedule-list"></ul>
+          </section>
+          <section class="home-schedule-column" aria-labelledby="home-schedule-next-heading">
+            <h3 id="home-schedule-next-heading">다음 일정</h3>
+            <ul id="home-schedule-next-list" class="home-schedule-list"></ul>
+          </section>
+        </div>
+        <p id="home-schedule-status" class="home-schedule-status" role="status">캘린더에서 일정을 불러오고 있어요.</p>
+      </section>
+
       <div class="home-info-grid">
         <aside class="home-notice" aria-labelledby="home-notice-title">
           <span class="home-notice-icon" aria-hidden="true">i</span>
@@ -205,6 +225,77 @@
         </div>
       </section>
       <p class="home-bookmark-note">노래책으로 바로 오고 싶다면 <a href="#songs">노래책 주소</a>를 북마크해 주세요.</p>
+    </section>
+
+
+    <section id="calendar-section" class="calendar" aria-labelledby="calendar-title" hidden>
+      <div class="calendar-heading">
+        <div class="calendar-intro">
+          <span class="calendar-heading-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M7.5 3v5m9-5v5m-13 3.5h17m-12 4h2m3 0h2"/></svg></span>
+          <div><p class="calendar-eyebrow">JEONGWA SCHEDULE</p><h1 id="calendar-title">정와와 만나는 날</h1></div>
+        </div>
+        <div class="calendar-heading-meta">
+          <span class="calendar-timezone">SEOUL · KST</span>
+          <button id="calendar-add" class="calendar-primary" type="button" hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>일정 추가</button>
+        </div>
+      </div>
+      <p id="calendar-edit-help" class="calendar-edit-help" hidden>날짜 칸의 +로 바로 추가하고, 일정 카드를 끌어 순서와 날짜를 바꿔 보세요. 마우스 오른쪽 버튼이나 일정 메뉴에서 복사·붙여넣기도 할 수 있어요.</p>
+      <div id="calendar-clipboard-bar" class="calendar-clipboard-bar" hidden>
+        <span class="calendar-clipboard-label">복사한 일정</span>
+        <strong id="calendar-clipboard-title"></strong>
+        <div class="calendar-clipboard-actions">
+          <button id="calendar-paste-selected" type="button">선택한 날짜에 붙여넣기</button>
+          <button id="calendar-clipboard-clear" type="button" aria-label="복사한 일정 비우기">비우기</button>
+        </div>
+      </div>
+      <p id="calendar-action-status" class="calendar-action-status" role="status" hidden></p>
+      <div class="calendar-layout">
+        <div class="calendar-board">
+          <div class="calendar-toolbar">
+            <button id="calendar-today" class="calendar-today-button" type="button">오늘로</button>
+            <div class="calendar-month-nav">
+              <button id="calendar-prev" class="calendar-arrow" type="button" aria-label="이전 달"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg></button>
+              <div class="calendar-month-caption"><p id="calendar-period-caption" aria-hidden="true"></p><h2 id="calendar-period" aria-live="polite"></h2></div>
+              <button id="calendar-next" class="calendar-arrow" type="button" aria-label="다음 달"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+            </div>
+            <div class="calendar-modes" role="group" aria-label="캘린더 보기">
+              <button type="button" data-calendar-mode="month" aria-pressed="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M2 6h12M6 6v8m4-8v8M2 10h12"/></svg>월간</button>
+              <button type="button" data-calendar-mode="week" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M6 2v12m4-12v12"/></svg>주간</button>
+            </div>
+          </div>
+          <div id="calendar-weekdays" class="calendar-weekdays" aria-hidden="true"><span><abbr title="일요일">SUN</abbr><i>일요일</i></span><span><abbr title="월요일">MON</abbr><i>월요일</i></span><span><abbr title="화요일">TUE</abbr><i>화요일</i></span><span><abbr title="수요일">WED</abbr><i>수요일</i></span><span><abbr title="목요일">THU</abbr><i>목요일</i></span><span><abbr title="금요일">FRI</abbr><i>금요일</i></span><span><abbr title="토요일">SAT</abbr><i>토요일</i></span></div>
+          <div id="calendar-days" class="calendar-days" aria-label="날짜 선택"></div>
+          <div class="calendar-board-footer">
+            <p id="calendar-month-summary" class="calendar-month-summary"></p>
+            <div id="calendar-legend" class="calendar-legend" aria-label="표시된 콘텐츠 유형"></div>
+          </div>
+        </div>
+        <div id="calendar-status" class="calendar-message" role="status" hidden><span></span><button id="calendar-retry" type="button" hidden>다시 불러오기</button></div>
+        <dialog id="calendar-day-details" class="calendar-day-details" aria-labelledby="calendar-selected-date">
+          <button id="calendar-details-close" class="calendar-details-close" type="button" aria-label="일정 상세 닫기">×</button>
+        <section class="calendar-agenda" aria-labelledby="calendar-selected-date">
+          <div class="calendar-agenda-heading">
+            <span id="calendar-selected-number" class="calendar-selected-number" aria-hidden="true"></span>
+            <div><h2 id="calendar-selected-date"></h2><p id="calendar-selected-count" class="calendar-selected-count"></p></div>
+          </div>
+          <p id="calendar-details-status" class="calendar-action-status" role="status" hidden></p>
+          <ul id="calendar-agenda-list" class="calendar-agenda-list" aria-live="polite"></ul>
+        </section>
+        </dialog>
+      </div>
+      <div id="calendar-undo-message" class="calendar-message" role="status" hidden><span></span><button id="calendar-undo" type="button">되돌리기</button></div>
+      <div id="calendar-context-menu" class="calendar-context-menu" role="menu" aria-label="일정 편집 메뉴" hidden>
+        <button type="button" role="menuitem" data-calendar-action="add">이 날짜에 일정 추가</button>
+        <button type="button" role="menuitem" data-calendar-action="edit">일정 수정</button>
+        <button type="button" role="menuitem" data-calendar-action="copy">일정 복사 <kbd>⌘ / Ctrl C</kbd></button>
+        <button type="button" role="menuitem" data-calendar-action="paste">이 날짜에 붙여넣기 <kbd>⌘ / Ctrl V</kbd></button>
+        <button type="button" role="menuitem" data-calendar-action="duplicate">이 날짜에 복제</button>
+        <button type="button" role="menuitem" data-calendar-action="next-week">다음 주에 복제</button>
+        <button type="button" role="menuitem" data-calendar-action="up">위로 이동</button>
+        <button type="button" role="menuitem" data-calendar-action="down">아래로 이동</button>
+        <button type="button" role="menuitem" data-calendar-action="change-date">날짜 변경</button>
+        <button type="button" role="menuitem" data-calendar-action="delete" class="calendar-menu-danger">일정 삭제</button>
+      </div>
     </section>
 
 
@@ -656,12 +747,59 @@
     </section>
   </div>
 
+  <dialog id="calendar-editor" class="calendar-dialog" aria-labelledby="calendar-editor-title">
+    <div class="calendar-dialog-head">
+      <h2 id="calendar-editor-title">새 일정</h2>
+      <button id="calendar-editor-close" type="button" aria-label="일정 편집 닫기">×</button>
+    </div>
+    <form id="calendar-form">
+      <div class="calendar-form-row">
+        <label>날짜 <input name="event_date" type="date" min="2000-01-01" max="2100-12-31" required></label>
+        <label>시간 <input name="start_time" type="time"><small>한국 시간 · 선택 입력, 비워 두면 표시하지 않아요.</small></label>
+      </div>
+      <fieldset class="calendar-content-types">
+        <legend>콘텐츠 유형</legend>
+        <div class="calendar-kind-options">
+          <label class="calendar-kind-option" data-kind="broadcast"><input type="radio" name="kind" value="broadcast" checked required><span>소통</span></label>
+          <label class="calendar-kind-option" data-kind="singing"><input type="radio" name="kind" value="singing" required><span>노래</span></label>
+          <label class="calendar-kind-option" data-kind="solo"><input type="radio" name="kind" value="solo" required><span>솔로 콘텐츠</span></label>
+          <label class="calendar-kind-option" data-kind="collab"><input type="radio" name="kind" value="collab" required><span>참여·합방</span></label>
+          <label class="calendar-kind-option" data-kind="watch"><input type="radio" name="kind" value="watch" required><span>같이 보기</span></label>
+          <label class="calendar-kind-option" data-kind="game"><input type="radio" name="kind" value="game" required><span>게임</span></label>
+          <label class="calendar-kind-option" data-kind="ad"><input type="radio" name="kind" value="ad" required><span>광고</span></label>
+          <label class="calendar-kind-option" data-kind="off"><input type="radio" name="kind" value="off" required><span>휴방</span></label>
+          <label class="calendar-kind-option" data-kind="cover"><input type="radio" name="kind" value="cover" required><span>커버곡</span></label>
+          <label class="calendar-kind-option" data-kind="relay"><input type="radio" name="kind" value="relay" required><span>중계</span></label>
+          <label class="calendar-kind-option" data-kind="before"><input type="radio" name="kind" value="before" required><span>방송 전</span></label>
+          <label class="calendar-kind-option" data-kind="event"><input type="radio" name="kind" value="event" required><span>기타</span></label>
+        </div>
+      </fieldset>
+      <label><span>제목 <span class="calendar-field-required" aria-hidden="true">*</span></span><input name="title" maxlength="120" required autocomplete="off" placeholder="방송/일정 제목"></label>
+      <label>부제 <input name="subtitle" maxlength="200" autocomplete="off" placeholder="부제목"></label>
+      <label>합방멤버 <input name="collab_members" maxlength="500" autocomplete="off" placeholder="함께하는 멤버 이름을 적어 주세요."></label>
+      <label>메모 <textarea name="description" rows="3" maxlength="2000" placeholder="추가 메모"></textarea></label>
+      <label>관련 링크 <input name="link_url" type="url" maxlength="2000" placeholder="https://" autocomplete="off"><small>방송국, 공지, 이벤트 안내 링크를 넣을 수 있어요.</small></label>
+      <p id="calendar-form-status" class="calendar-form-status" role="status"></p>
+      <div class="calendar-dialog-actions">
+        <button id="calendar-delete" class="calendar-danger" type="button" hidden>일정 삭제</button>
+        <button id="calendar-copy" type="button" hidden>일정 복사</button>
+        <button id="calendar-duplicate" type="button" hidden>일정 복제</button>
+        <button id="calendar-editor-cancel" type="button">취소</button>
+        <button class="calendar-primary" type="submit">저장</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
-  <script src="songbook-session.js?v=20261012-home"></script>
-  <script src="script.js?v=20261012-home"></script>
-  <script src="game-navigation.js?v=20261012-banner"></script>
+  <script src="songbook-session.js?v=20261019-calendar"></script>
+  <script src="script.js?v=20261019-editing"></script>
+  <script src="game-navigation.js?v=20261019-calendar"></script>
+  <script src="calendar-model.js?v=20261019-editing"></script>
+  <script src="calendar-store.js?v=20261020-home"></script>
+  <script src="calendar.js?v=20261020-home"></script>
+  <script src="home-schedule.js?v=20261020-home"></script>
   <script src="broadcast-status.js?v=20261012-banner"></script>
   <script src="soop-notices.js?v=20261012-banner"></script>
 </body>

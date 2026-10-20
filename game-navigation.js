@@ -6,7 +6,7 @@
   let storage;
   try { storage = window.sessionStorage; } catch { storage = null; }
   const saved = session.read(storage, session.sessionKey) || {};
-  const scrollByView = Object.fromEntries(["home", "songs", "game"].map(view => [view, session.scroll(saved.scroll?.[view])]));
+  const scrollByView = Object.fromEntries(["home", "calendar", "songs", "game"].map(view => [view, session.scroll(saved.scroll?.[view])]));
   const homeInput = document.querySelector("#home-song-search");
   let currentView = session.viewForHash(location.hash);
   let currentUrl = location.href;
@@ -65,6 +65,7 @@
     document.body.dataset.siteView = view;
     for (const [selector, visible] of [
       ["#home-section", view === "home"],
+      ["#calendar-section", view === "calendar"],
       [".intro", view === "songs"], [".songbook", view === "songs"],
       ["#game-section", view === "game"],
     ]) {
@@ -92,7 +93,7 @@
   }
 
   function navigate(view, options = {}) {
-    if (!["home", "songs", "game"].includes(view)) return;
+    if (!["home", "calendar", "songs", "game"].includes(view)) return;
     persist();
     const previousView = currentView;
     applying = true;
@@ -150,7 +151,7 @@
     navigate(button.dataset.siteView);
   }));
   document.addEventListener("click", event => {
-    const link = event.target.closest('a[href="#home"], a[href="#songs"], a[href="#game"]');
+    const link = event.target.closest('a[href="#home"], a[href="#calendar"], a[href="#songs"], a[href="#game"]');
     if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     navigate(link.hash.slice(1));

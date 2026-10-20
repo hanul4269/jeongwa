@@ -7,7 +7,7 @@
   const sessionKey = "jeongwa-songbook-session-v1";
   const authKey = "jeongwa-oauth-return-v1";
   const authMaxAge = 30 * 60 * 1000;
-  const views = ["home", "songs", "game"];
+  const views = ["home", "calendar", "songs", "game"];
   const categories = ["전체", "K-POP", "J-POP", "POP/OST", "숙제곡"];
   const text = value => typeof value === "string" ? value.slice(0, 1000) : "";
   const scroll = value => Number.isFinite(value) ? Math.max(0, Math.min(value, 10000000)) : 0;
@@ -37,6 +37,7 @@
 
   function viewForHash(hash) {
     if (!hash || hash === "#home") return "home";
+    if (hash === "#calendar") return "calendar";
     if (hash === "#game") return "game";
     // Older bookmarks (including #top) historically opened the songbook.
     return "songs";
