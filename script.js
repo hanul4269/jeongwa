@@ -53,6 +53,9 @@ let upEvents = [...legacyUpEvents];
 let activeUpEventId = null;
 let upRankingRefreshTimer = null;
 let upStartupHandled = false;
+let upEventSaving = false;
+let upEventsLoadGeneration = 0;
+let upRankingGeneration = 0;
 const upRankingCache = new Map();
 let activeAdminTab = "editors";
 let legacyMigrationPromise = null;
@@ -317,7 +320,7 @@ function normalizeUpEvent(event) {
   const sortOrder = Number.parseInt(event.sortOrder ?? event.sort_order, 10);
 
   return {
-    id: event.id ?? `up-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: String(event.id ?? `up-${Date.now()}-${Math.random().toString(36).slice(2)}`),
     tabName: clean(event.tabName ?? event.tab_name) || "UP 이벤트",
     title: clean(event.title),
     soopUrl: normalizeUrl(event.soopUrl ?? event.soop_url),
@@ -490,12 +493,15 @@ async function refreshSharedSongData() {
 }
 
 async function refreshSharedUpEvents() {
+  if (upEventSaving) return false;
+  const generation = ++upEventsLoadGeneration;
   const { data, error } = await authDb
     .from("up_events")
     .select("id, tab_name, title, soop_url, sort_order, is_active, show_on_startup, updated_at")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
+  if (generation !== upEventsLoadGeneration || upEventSaving) return false;
   if (error) {
     console.warn("공유 UP 이벤트를 불러오지 못했습니다.", error.message);
     upEvents = [];
@@ -1558,17 +1564,27 @@ function upEventFromForm(form) {
   });
 }
 
+function updateUpEventFormMode() {
+  const editing = Boolean($("#up-event-id").value);
+  $("#up-event-form-title").textContent = editing ? "UP 이벤트 수정" : "새 UP 이벤트";
+  $("#save-up-event").textContent = editing ? "변경사항 저장" : "이벤트 추가";
+  $("#clear-up-event-form").textContent = editing ? "수정 취소" : "새 이벤트";
+}
+
 function clearUpEventForm() {
+  if (upEventSaving) return;
   $("#up-event-form").reset();
   $("#up-event-id").value = "";
   $("#up-event-active").checked = true;
   $("#up-event-startup").checked = false;
   $("#up-event-order").value = String(upEvents.length);
   $("#up-event-status").textContent = "";
+  updateUpEventFormMode();
 }
 
 function editUpEvent(eventId) {
-  const event = upEvents.find((item) => item.id === eventId);
+  if (!canEdit() || upEventSaving) return;
+  const event = upEvents.find((item) => String(item.id) === String(eventId));
   if (!event) return;
 
   $("#up-event-id").value = event.id;
@@ -1578,39 +1594,87 @@ function editUpEvent(eventId) {
   $("#up-event-order").value = String(event.sortOrder);
   $("#up-event-active").checked = event.isActive;
   $("#up-event-startup").checked = event.showOnStartup;
+  $("#up-event-status").textContent = "내용을 수정한 뒤 변경사항 저장을 눌러주세요.";
+  updateUpEventFormMode();
   $("#up-event-title").focus();
 }
 
 async function saveUpEvent(form) {
+  if (upEventSaving) return false;
+  if (!canEdit()) {
+    $("#up-event-status").textContent = "UP 이벤트 편집 권한이 필요합니다.";
+    return false;
+  }
+  const fields = new FormData(form);
+  const editingId = clean(fields.get("id"));
+  if (editingId && !upEvents.some((item) => String(item.id) === editingId)) {
+    $("#up-event-status").textContent = "수정할 이벤트를 찾지 못했습니다. 목록을 다시 확인해주세요.";
+    return false;
+  }
+  if (!clean(fields.get("tabName")) || !clean(fields.get("title"))) {
+    $("#up-event-status").textContent = "탭 이름과 제목을 입력해주세요.";
+    return false;
+  }
+  const sortOrder = Number(fields.get("sortOrder"));
+  if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 2147483647) {
+    $("#up-event-status").textContent = "표시 순서는 0 이상의 정수로 입력해주세요.";
+    return false;
+  }
   const event = upEventFromForm(form);
-  if (!event.tabName || !event.title) return false;
   if (!parseSoopPostUrl(event.soopUrl)) {
     $("#up-event-status").textContent = "올바른 SOOP 게시글 또는 댓글 URL을 입력해주세요.";
     return false;
   }
 
-  const { error } = await authDb
-    .from("up_events")
-    .upsert(upEventToRow(event), { onConflict: "id" });
-
-  if (error) {
-    $("#up-event-status").textContent = `저장하지 못했습니다: ${error.message}`;
+  const controls = [...$("#admin-panel-up").querySelectorAll("input, button")];
+  const disabled = controls.map((control) => control.disabled);
+  upEventSaving = true;
+  ++upEventsLoadGeneration;
+  controls.forEach((control) => { control.disabled = true; });
+  $("#up-event-status").textContent = "저장 중입니다...";
+  let saved = false;
+  try {
+    const row = upEventToRow(event);
+    const query = editingId
+      ? authDb.from("up_events").update(row).eq("id", editingId)
+      : authDb.from("up_events").insert(row);
+    const { data, error } = await query.select("id").single();
+    if (error) {
+      $("#up-event-status").textContent = "저장하지 못했습니다: " + error.message;
+      return false;
+    }
+    if (!data || String(data.id) !== String(event.id)) {
+      $("#up-event-status").textContent = "저장 결과를 확인하지 못했습니다. 권한과 이벤트 상태를 확인해주세요.";
+      return false;
+    }
+    const exists = upEvents.some((item) => String(item.id) === String(event.id));
+    upEvents = exists
+      ? upEvents.map((item) => (String(item.id) === String(event.id) ? event : item))
+      : [...upEvents, event];
+    upEvents.sort((a, b) => a.sortOrder - b.sortOrder);
+    upRankingCache.delete(String(event.id));
+    ++upRankingGeneration;
+    saved = true;
+  } catch {
+    $("#up-event-status").textContent = "저장하지 못했습니다. 연결 상태를 확인하고 다시 시도해주세요.";
     return false;
+  } finally {
+    upEventSaving = false;
+    controls.forEach((control, index) => { control.disabled = disabled[index]; });
   }
-
-  const exists = upEvents.some((item) => item.id === event.id);
-  upEvents = exists
-    ? upEvents.map((item) => (item.id === event.id ? event : item))
-    : [...upEvents, event];
-  upEvents.sort((a, b) => a.sortOrder - b.sortOrder);
-  clearUpEventForm();
-  renderUpEvents();
-  updateUpRankingButton();
-  return true;
+  if (saved) {
+    clearUpEventForm();
+    $("#up-event-status").textContent = editingId ? "UP 이벤트를 수정했습니다." : "UP 이벤트를 추가했습니다.";
+    renderUpEvents();
+    updateUpRankingButton();
+    if (!$("#up-ranking-modal").hidden) refreshUpRanking();
+  }
+  return saved;
 }
 
 async function deleteUpEvent(eventId) {
-  const event = upEvents.find((item) => item.id === eventId);
+  if (!canEdit() || upEventSaving) return false;
+  const event = upEvents.find((item) => String(item.id) === String(eventId));
   if (!event) return false;
   if (!window.confirm(`'${event.title}' UP 이벤트를 삭제할까요?`)) return false;
 
@@ -1624,7 +1688,10 @@ async function deleteUpEvent(eventId) {
     return false;
   }
 
-  upEvents = upEvents.filter((event) => event.id !== eventId);
+  upEvents = upEvents.filter((event) => String(event.id) !== String(eventId));
+  if ($("#up-event-id").value === String(eventId)) clearUpEventForm();
+  upRankingCache.delete(String(eventId));
+  ++upRankingGeneration;
   renderUpEvents();
   updateUpRankingButton();
   return true;
@@ -1724,8 +1791,9 @@ async function fetchSoopRanking(event, force = false) {
   const parsed = parseSoopPostUrl(event.soopUrl);
   if (!parsed) throw new Error("SOOP 게시글 URL을 확인해주세요.");
 
-  const cached = upRankingCache.get(event.id);
-  if (!force && cached && Date.now() - cached.savedAt < 2 * 60 * 1000) return cached;
+  const postKey = parsed.bjId + "/" + parsed.postNo;
+  const cached = upRankingCache.get(String(event.id));
+  if (!force && cached?.postKey === postKey && Date.now() - cached.savedAt < 2 * 60 * 1000) return cached;
 
   const items = [];
   let page = 1;
@@ -1755,23 +1823,30 @@ async function fetchSoopRanking(event, force = false) {
 
   items.sort((a, b) => b.likeCount - a.likeCount || a.timestamp.localeCompare(b.timestamp));
   items.forEach((item, index) => { item.rank = index + 1; });
-  const result = { ranking: items, updatedAt: new Date().toISOString(), savedAt: Date.now() };
-  upRankingCache.set(event.id, result);
+  const result = { ranking: items, postKey, updatedAt: new Date().toISOString(), savedAt: Date.now() };
+  const current = upEvents.find((item) => String(item.id) === String(event.id));
+  const currentPost = parseSoopPostUrl(current?.soopUrl);
+  if (current?.isActive && currentPost && currentPost.bjId + "/" + currentPost.postNo === postKey) {
+    upRankingCache.set(String(event.id), result);
+  }
   return result;
 }
 
 async function refreshUpRanking(force = false) {
+  const generation = ++upRankingGeneration;
   const event = upRankingEvent();
   renderUpRankingTabs();
   renderUpRankingEvent(event);
-  if (!event) return;
+  if (!event) { $("#up-ranking-updated").textContent = ""; return; }
 
   $("#up-ranking-list").innerHTML = '<p class="admin-empty">좋아요 순위를 불러오는 중입니다.</p>';
   $("#up-ranking-updated").textContent = "SOOP 게시글을 확인하고 있습니다.";
   try {
     const result = await fetchSoopRanking(event, force);
+    if (generation !== upRankingGeneration) return;
     renderUpRankingList(event, result.ranking, result.updatedAt);
   } catch (error) {
+    if (generation !== upRankingGeneration) return;
     $("#up-ranking-list").innerHTML = `<p class="admin-empty">${escapeHtml(error.message)}</p>`;
     $("#up-ranking-updated").textContent = "랭킹을 불러오지 못했습니다.";
   }
@@ -1788,6 +1863,7 @@ function openUpRankingModal(options = {}) {
 }
 
 function closeUpRankingModal() {
+  ++upRankingGeneration;
   window.clearInterval(upRankingRefreshTimer);
   upRankingRefreshTimer = null;
   closeModal("#up-ranking-modal");

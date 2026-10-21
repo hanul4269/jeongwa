@@ -38,7 +38,7 @@
   <link rel="apple-touch-icon" href="jeongwa-profile.png">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261012-home">
+  <link rel="stylesheet" href="styles.css?v=up-event-edit-20261022">
   <link rel="stylesheet" href="home.css?v=20261020-schedule">
   <link rel="stylesheet" href="calendar.css?v=20261020-details">
 </head>
@@ -558,7 +558,8 @@
 
       <div class="admin-panel" id="admin-panel-up" role="tabpanel" aria-labelledby="admin-tab-up" data-admin-panel="up" hidden>
         <p class="admin-help">활성 이벤트는 접속 시 UP 랭킹 모달로 자동 표시됩니다. 여러 이벤트가 있다면 먼저 보여줄 이벤트를 선택할 수 있습니다.</p>
-        <form id="up-event-form" class="song-form">
+        <h3 id="up-event-form-title">새 UP 이벤트</h3>
+        <form id="up-event-form" class="song-form" aria-labelledby="up-event-form-title">
           <input id="up-event-id" name="id" type="hidden">
           <label>
             <span>탭 이름</span>
@@ -587,7 +588,7 @@
             </label>
           </div>
           <div class="form-actions">
-            <button class="draw-btn" type="submit">저장</button>
+            <button class="draw-btn" id="save-up-event" type="submit">이벤트 추가</button>
             <button class="secondary-btn" id="clear-up-event-form" type="button">새 이벤트</button>
           </div>
           <p class="form-status" id="up-event-status" aria-live="polite"></p>
@@ -794,7 +795,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js"></script>
   <script src="songs-data.js"></script>
   <script src="songbook-session.js?v=20261019-calendar"></script>
-  <script src="script.js?v=20261019-editing"></script>
+  <script src="script.js?v=up-event-edit-20261022"></script>
   <script src="game-navigation.js?v=20261019-calendar"></script>
   <script src="calendar-model.js?v=20261019-editing"></script>
   <script src="calendar-store.js?v=20261020-home"></script>
